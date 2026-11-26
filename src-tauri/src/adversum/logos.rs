@@ -1049,6 +1049,20 @@ pub async fn adversum_logo_fetch(
         .await
         .map_err(|_| "Logo fetch queue is unavailable".to_string())?;
     let resolution = resolve_logo(homepage, token).await;
+    // One line per lookup makes "why does this customer have no logo" answerable
+    // from the log file. The homepage is the customer's public website.
+    match &resolution.logo {
+        Ok((source, _)) => log::info!(
+            "Logo lookup for customer {}: found via {source:?} (homepage {homepage:?})",
+            request.customer_id
+        ),
+        Err(miss) => log::info!(
+            "Logo lookup for customer {}: none, {:?} {} (homepage {homepage:?})",
+            request.customer_id,
+            miss.problem,
+            miss.detail.as_deref().unwrap_or("")
+        ),
+    }
     let now = unix_now();
     store_auto(&dir, request.customer_id, homepage, resolution, now)?;
     let entry = read_entry(&dir, request.customer_id, now).ok_or("Logo cache entry is missing")?;

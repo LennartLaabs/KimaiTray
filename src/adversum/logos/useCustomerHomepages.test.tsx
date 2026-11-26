@@ -6,8 +6,9 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { KimaiClient } from "../../api/kimaiClient";
 
-const mocks = vi.hoisted(() => ({ lookup: vi.fn() }));
+const mocks = vi.hoisted(() => ({ lookup: vi.fn(), warn: vi.fn() }));
 vi.mock("./customerHomepage", () => ({ lookupCustomerHomepage: mocks.lookup }));
+vi.mock("../../utils/logger", () => ({ logger: { warn: mocks.warn } }));
 
 import { useCustomerHomepages } from "./useCustomerHomepages";
 
@@ -42,6 +43,7 @@ describe("useCustomerHomepages", () => {
     expect(result.current.lookups!.get(1)).toEqual({ homepage: "https://site1.example", failed: false });
     expect(result.current.lookups!.get(2)).toEqual({ homepage: null, failed: false });
     expect(result.current.lookups!.get(3)?.failed).toBe(true);
+    expect(mocks.warn).toHaveBeenCalledWith("Homepage lookup failed for 1 of 6 customers");
     expect(result.current.updatedAt).toBeGreaterThan(0);
   });
 
@@ -84,6 +86,7 @@ describe("useCustomerHomepages", () => {
   it("records a lookup made for a single customer", async () => {
     const { result } = renderHook(() => useCustomerHomepages(client, true, [1, 2]), { wrapper });
     await waitFor(() => expect(result.current.lookups?.size).toBe(2));
+    expect(mocks.warn).not.toHaveBeenCalled();
     act(() => result.current.remember(2, { homepage: "https://two.example", failed: false }));
     await waitFor(() =>
       expect(result.current.lookups?.get(2)?.homepage).toBe("https://two.example"),

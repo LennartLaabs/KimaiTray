@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { KimaiClient } from "../../api/kimaiClient";
 import { lookupCustomerHomepage, type HomepageLookup } from "./customerHomepage";
+import { logger } from "../../utils/logger";
 
 /** Homepages are read again when the popup opens, at most once a minute. */
 const HOMEPAGE_STALE_TIME = 60 * 1000;
@@ -34,6 +35,10 @@ async function lookupAll(
     }
   };
   await Promise.all(Array.from({ length: PARALLEL_LOOKUPS }, worker));
+  const failed = [...lookups.values()].filter((lookup) => lookup.failed).length;
+  if (failed > 0) {
+    logger.warn(`Homepage lookup failed for ${failed} of ${lookups.size} customers`);
+  }
   return lookups;
 }
 
