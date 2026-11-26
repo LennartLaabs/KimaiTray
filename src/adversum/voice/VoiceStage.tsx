@@ -68,7 +68,7 @@ export default function VoiceStage({
 }: VoiceStageProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const busy = state.phase === "recording" || state.phase === "transcribing";
-  const manualRecording = state.phase === "recording" && state.manual;
+  const recording = state.phase === "recording";
 
   // No text field holds the focus here; the card itself takes the keys.
   useEffect(() => {
@@ -82,14 +82,15 @@ export default function VoiceStage({
         event.preventDefault();
         if (busy) void cancelVoice().catch(ignore);
         onClose();
-      } else if (event.key === "Enter" && manualRecording) {
+      } else if (event.key === "Enter" && recording) {
+        // Also while the key is held: a way out if its release gets lost.
         event.preventDefault();
         void finishVoice().catch(ignore);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [busy, manualRecording, onClose]);
+  }, [busy, recording, onClose]);
 
   return (
     <div ref={rootRef} tabIndex={-1} data-voice-phase={state.phase} className="outline-none">
@@ -161,15 +162,13 @@ function Recording({ manual }: { manual: boolean }) {
           {t(manual ? "adversum.voice.hintManual" : "adversum.voice.hintHold")}
         </span>
       </span>
-      {manual && (
-        <button
-          type="button"
-          onClick={() => void finishVoice().catch(ignore)}
-          className="shrink-0 rounded-lg bg-[var(--accent)] px-2.5 py-1 text-[13px] font-semibold text-white hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-        >
-          {t("adversum.voice.done")}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => void finishVoice().catch(ignore)}
+        className="shrink-0 rounded-lg bg-[var(--accent)] px-2.5 py-1 text-[13px] font-semibold text-white hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      >
+        {t("adversum.voice.done")}
+      </button>
       <Kbd>esc</Kbd>
     </div>
   );
@@ -199,7 +198,7 @@ function Message({ state, onClose }: { state: VoiceState; onClose: () => void })
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const reason = state.phase === "error" ? (state.reason ?? "failed") : "empty";
+  const reason = state.reason ?? (state.phase === "error" ? "failed" : "empty");
   return (
     <div className="flex items-center gap-3 px-4 py-3.5">
       <MicIcon className="h-5 w-5 shrink-0 text-gray-400 dark:text-gray-500" />
@@ -209,6 +208,14 @@ function Message({ state, onClose }: { state: VoiceState; onClose: () => void })
         className="min-w-0 flex-1 text-[14px] text-gray-700 dark:text-gray-300"
       >
         {t(`adversum.voice.problem.${reason}`)}
+        {state.detail && (
+          <span
+            data-voice-detail
+            className="mt-0.5 block break-words font-mono text-[11px] text-gray-500 dark:text-gray-400"
+          >
+            {state.detail}
+          </span>
+        )}
       </span>
       {reason === "permissionDenied" && (
         <button

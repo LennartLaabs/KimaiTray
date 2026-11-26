@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   settings: { settings: {} as any, update: vi.fn() },
   listen: vi.fn(),
   getVoiceStatus: vi.fn(),
+  getVoiceDevices: vi.fn(),
   downloadVoiceModel: vi.fn(),
   cancelVoiceDownload: vi.fn(),
   deleteVoiceModel: vi.fn(),
@@ -34,9 +35,11 @@ vi.mock("./AcceleratorInput", () => ({
     </button>
   ),
 }));
+vi.mock("./MicrophoneTest", () => ({ default: () => <div>microphone-test</div> }));
 vi.mock("../voice/voiceApi", async (original) => ({
   ...(await original<typeof import("../voice/voiceApi")>()),
   getVoiceStatus: mocks.getVoiceStatus,
+  getVoiceDevices: mocks.getVoiceDevices,
   downloadVoiceModel: mocks.downloadVoiceModel,
   cancelVoiceDownload: mocks.cancelVoiceDownload,
   deleteVoiceModel: mocks.deleteVoiceModel,
@@ -60,6 +63,7 @@ const baseStatus: VoiceStatus = {
   modelDir: "/Users/l/Library/Application Support/io.adversum.kimaitray/adversum/models",
   defaultModelDir: "/Users/l/Library/Application Support/io.adversum.kimaitray/adversum/models",
   download: null,
+  debugDir: "/Users/l/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug",
 };
 
 let status: VoiceStatus;
@@ -95,6 +99,10 @@ beforeEach(() => {
   mocks.settings.update = vi.fn().mockResolvedValue(true);
   useSettings();
   mocks.getVoiceStatus.mockImplementation(async () => status);
+  mocks.getVoiceDevices.mockResolvedValue([
+    { id: "coreaudio:usb", name: "Trust USB microphone", isDefault: true },
+    { id: "coreaudio:teams", name: "Microsoft Teams Audio", isDefault: false },
+  ]);
   mocks.listen.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
     handlers[event] = handler;
     return vi.fn();
@@ -346,6 +354,44 @@ describe("VoiceSection", () => {
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: "adversum.voice.settings.resetFolder" }));
     expect(mocks.settings.update).toHaveBeenCalledWith("voiceModelDir", "");
+  });
+
+  it("chooses the microphone and offers the test and the diagnosis switch", async () => {
+    await renderPage();
+    const select = screen.getByRole("combobox", { name: "adversum.voice.settings.device" }) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      "adversum.voice.settings.systemInput",
+      "adversum.voice.settings.deviceIsSystemInput:Trust USB microphone",
+      "Microsoft Teams Audio",
+    ]);
+    expect(select.value).toBe("");
+    fireEvent.change(select, { target: { value: "coreaudio:teams" } });
+    expect(mocks.settings.update).toHaveBeenCalledWith("voiceInputDevice", "coreaudio:teams");
+    expect(screen.getByText("microphone-test")).toBeTruthy();
+    expect(document.querySelector("[data-voice-debug-dir]")?.textContent).toBe(status.debugDir);
+    fireEvent.click(screen.getByRole("switch", { name: "adversum.voice.settings.debug" }));
+    expect(mocks.settings.update).toHaveBeenCalledWith("voiceDebug", true);
+    cleanup();
+
+    // A stored microphone that is connected is simply selected.
+    useSettings({ voiceInputDevice: "coreaudio:teams" });
+    await renderPage();
+    const chosen = screen.getByRole("combobox", { name: "adversum.voice.settings.device" }) as HTMLSelectElement;
+    expect(chosen.value).toBe("coreaudio:teams");
+    expect(chosen.options).toHaveLength(3);
+    cleanup();
+
+    // A stored microphone that is unplugged stays selectable, and a failing
+    // device list leaves the system input.
+    mocks.getVoiceDevices.mockRejectedValue(new Error("no CoreAudio"));
+    useSettings({ voiceInputDevice: "coreaudio:gone" });
+    await renderPage();
+    const again = screen.getByRole("combobox", { name: "adversum.voice.settings.device" }) as HTMLSelectElement;
+    expect([...again.options].map((option) => option.textContent)).toEqual([
+      "adversum.voice.settings.systemInput",
+      "adversum.voice.settings.deviceMissing",
+    ]);
+    expect(again.value).toBe("coreaudio:gone");
   });
 
   it("sets the voice key and how it is used", async () => {

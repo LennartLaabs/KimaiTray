@@ -20,6 +20,7 @@ const THREADS: i32 = 4;
 
 struct Engine {
     path: PathBuf,
+    gpu: bool,
     // The state borrows nothing from the context in Rust terms, but must not
     // outlive it: fields drop in declaration order, the state first.
     state: WhisperState,
@@ -27,6 +28,21 @@ struct Engine {
 }
 
 static ENGINE: Mutex<Option<Engine>> = Mutex::new(None);
+/// Set once a run failed on the GPU and succeeded on the CPU.
+static GPU_GAVE_UP: AtomicBool = AtomicBool::new(false);
+
+/// What the model understood.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Transcript {
+    pub(crate) text: String,
+    /// The model's own estimate that the audio held no speech, 0 to 1.
+    pub(crate) no_speech: f32,
+}
+
+enum RunError {
+    Cancelled,
+    Failed(String),
+}
 static USES: AtomicU64 = AtomicU64::new(0);
 
 fn engine() -> std::sync::MutexGuard<'static, Option<Engine>> {
@@ -49,38 +65,56 @@ pub(crate) fn supports_preview() -> bool {
     cfg!(target_arch = "aarch64")
 }
 
-fn load(path: &Path) -> Result<Engine, String> {
+/// Metal is reliable on Apple Silicon only.
+fn gpu_wanted() -> bool {
+    cfg!(target_arch = "aarch64") && !GPU_GAVE_UP.load(Ordering::Relaxed)
+}
+
+fn load(path: &Path, gpu: bool) -> Result<Engine, String> {
+    // Sends what whisper.cpp prints to the app's log (warnings and errors;
+    // the level is set where the log is configured).
     whisper_rs::install_logging_hooks();
     let mut parameters = WhisperContextParameters::default();
-    // Metal is reliable on Apple Silicon only.
-    parameters.use_gpu(cfg!(target_arch = "aarch64"));
+    parameters.use_gpu(gpu);
     let path_text = path.to_str().ok_or("The model path is not valid Unicode")?;
     let context = WhisperContext::new_with_params(path_text, parameters)
         .map_err(|error| format!("Cannot load the speech model: {error}"))?;
     let state = context
         .create_state()
         .map_err(|error| format!("Cannot prepare the speech model: {error}"))?;
-    log::info!("Speech model loaded: {}", path.display());
+    log::info!(
+        "Speech model loaded: {} ({})",
+        path.display(),
+        if gpu { "GPU" } else { "CPU" }
+    );
     Ok(Engine {
         path: path.to_path_buf(),
+        gpu,
         state,
         _context: context,
     })
 }
 
-fn ensure<'a>(slot: &'a mut Option<Engine>, path: &Path) -> Result<&'a mut Engine, String> {
-    if slot.as_ref().is_some_and(|engine| engine.path != path) {
+fn ensure<'a>(
+    slot: &'a mut Option<Engine>,
+    path: &Path,
+    gpu: bool,
+) -> Result<&'a mut Engine, String> {
+    if slot
+        .as_ref()
+        .is_some_and(|engine| engine.path != path || engine.gpu != gpu)
+    {
         *slot = None;
     }
     if slot.is_none() {
-        *slot = Some(load(path)?);
+        *slot = Some(load(path, gpu)?);
     }
     Ok(slot.as_mut().expect("engine was just loaded"))
 }
 
 /// Loads the model ahead of the first transcription, while the user speaks.
 pub(crate) fn preload(path: &Path) {
-    if let Err(error) = ensure(&mut engine(), path) {
+    if let Err(error) = ensure(&mut engine(), path, gpu_wanted()) {
         log::warn!("{error}");
     }
 }
@@ -126,19 +160,14 @@ pub(crate) fn join_segments<'a>(segments: impl IntoIterator<Item = &'a str>) -> 
         .join(" ")
 }
 
-/// Transcribes 16 kHz mono speech as German. `vocabulary` primes the model
-/// with the names it should expect. A set `abort` flag ends the run early.
-pub(crate) fn transcribe(
-    model: &Path,
+/// One run of the model on an engine.
+fn run(
+    engine: &mut Engine,
     samples: &[f32],
     vocabulary: &str,
     quality: Quality,
-    abort: Arc<AtomicBool>,
-) -> Result<String, String> {
-    let padded = audio::pad_for_whisper(samples.to_vec());
-    let mut slot = engine();
-    let engine = ensure(&mut slot, model)?;
-
+    abort: &Arc<AtomicBool>,
+) -> Result<Transcript, RunError> {
     let mut params = FullParams::new(match quality {
         Quality::Final => SamplingStrategy::BeamSearch {
             beam_size: 5,
@@ -167,29 +196,85 @@ pub(crate) fn transcribe(
     // to a boxed trait object but reads it back as the closure itself, so the
     // callback answers from unrelated memory and aborts runs at random
     // (whisper error -6). Hence the plain callback with our own flag.
-    // SAFETY: The user data points to the flag inside `abort`, which this
-    // function keeps alive until `full` has returned.
+    // SAFETY: The user data points to the flag inside `abort`, which the
+    // caller keeps alive until `full` has returned.
     unsafe {
         params.set_abort_callback(Some(abort_requested));
-        params.set_abort_callback_user_data(Arc::as_ptr(&abort).cast_mut().cast());
+        params.set_abort_callback_user_data(Arc::as_ptr(abort).cast_mut().cast());
     }
 
-    let outcome = engine.state.full(params, &padded);
+    let outcome = engine.state.full(params, samples);
     if abort.load(Ordering::Relaxed) {
-        return Err("Transcription was cancelled".into());
+        return Err(RunError::Cancelled);
     }
-    outcome.map_err(|error| format!("Transcription failed: {error}"))?;
-    let segments: Vec<String> = engine
-        .state
-        .as_iter()
-        .map(|segment| segment.to_str_lossy().map(|text| text.into_owned()))
-        .collect::<Result<_, _>>()
-        .map_err(|error| format!("Transcription failed: {error}"))?;
+    // Error -6 is the encoder, -7 the decoder; whisper.cpp's own message is
+    // in the log next to this one.
+    outcome.map_err(|error| RunError::Failed(format!("Whisper: {error}")))?;
+    let mut texts = Vec::new();
+    let mut no_speech = 0.0;
+    for segment in engine.state.as_iter() {
+        let text = segment
+            .to_str_lossy()
+            .map_err(|error| RunError::Failed(format!("Whisper: {error}")))?;
+        texts.push(text.into_owned());
+        no_speech += segment.no_speech_probability();
+    }
+    let segments = texts.len().max(1) as f32;
+    Ok(Transcript {
+        text: join_segments(texts.iter().map(String::as_str)),
+        no_speech: no_speech / segments,
+    })
+}
+
+/// Transcribes 16 kHz mono speech as German. `vocabulary` primes the model
+/// with the names it should expect. A set `abort` flag ends the run early.
+///
+/// A final run that fails on the GPU is repeated on the CPU, which is slower
+/// but does not depend on the graphics memory other programs leave over.
+pub(crate) fn transcribe(
+    model: &Path,
+    samples: &[f32],
+    vocabulary: &str,
+    quality: Quality,
+    abort: Arc<AtomicBool>,
+) -> Result<Transcript, String> {
+    let padded = audio::pad_for_whisper(samples.to_vec());
+    let mut slot = engine();
+    let gpu = gpu_wanted();
+    let first = run(
+        ensure(&mut slot, model, gpu)?,
+        &padded,
+        vocabulary,
+        quality,
+        &abort,
+    );
+    let outcome = match first {
+        Err(RunError::Failed(error)) if gpu && quality == Quality::Final => {
+            log::warn!("{error} on the GPU; trying once more on the CPU");
+            *slot = None;
+            let second = run(
+                ensure(&mut slot, model, false)?,
+                &padded,
+                vocabulary,
+                quality,
+                &abort,
+            );
+            if second.is_ok() {
+                log::warn!("The CPU run worked; the GPU stays off until the app restarts");
+                GPU_GAVE_UP.store(true, Ordering::Relaxed);
+            }
+            second
+        }
+        other => other,
+    };
     drop(slot);
     if quality == Quality::Final {
         schedule_unload();
     }
-    Ok(join_segments(segments.iter().map(String::as_str)))
+    outcome.map_err(|error| match error {
+        RunError::Cancelled => "Transcription was cancelled".to_string(),
+        RunError::Failed(error) => error,
+    })
 }
 
 #[cfg(test)]
@@ -241,8 +326,41 @@ mod tests {
                 Arc::new(AtomicBool::new(false)),
             )
             .unwrap();
-            println!("{:?}: {text}", started.elapsed());
-            assert!(!text.is_empty());
+            println!(
+                "{:?}: {} (no speech {:.2})",
+                started.elapsed(),
+                text.text,
+                text.no_speech
+            );
+            assert!(!text.text.is_empty());
+        }
+        // A preview that is cancelled midway must not spoil the next run:
+        // this is what happens when the key is released during a preview.
+        for delay_ms in [0_u64, 30, 120, 300] {
+            let abort = Arc::new(AtomicBool::new(false));
+            let trigger = abort.clone();
+            let timer = std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                trigger.store(true, Ordering::Relaxed);
+            });
+            let aborted = transcribe(
+                Path::new(&model),
+                &samples,
+                &vocabulary,
+                Quality::Preview,
+                abort,
+            );
+            timer.join().unwrap();
+            println!("cancelled after {delay_ms} ms: {aborted:?}");
+            let after = transcribe(
+                Path::new(&model),
+                &samples,
+                &vocabulary,
+                Quality::Final,
+                Arc::new(AtomicBool::new(false)),
+            );
+            println!("run after the cancelled one: {after:?}");
+            assert!(after.is_ok_and(|transcript| !transcript.text.is_empty()));
         }
         assert!(is_idle_and_loaded());
         unload();

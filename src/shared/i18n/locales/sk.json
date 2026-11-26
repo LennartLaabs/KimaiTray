@@ -882,7 +882,7 @@
       "description": "Hold a key, say what you are working on, release: the matching timer starts. Recognition runs entirely on this Mac.",
       "speak": "Speak instead of typing",
       "listening": "Listening …",
-      "hintHold": "Release to finish · esc cancels",
+      "hintHold": "Release to finish · ↵ works too · esc cancels",
       "hintManual": "↵ or “Done” to finish · esc cancels",
       "done": "Done",
       "transcribing": "Working it out …",
@@ -898,7 +898,11 @@
         "permissionDenied": "No access to the microphone.",
         "permissionRequested": "Please allow microphone access, then speak again.",
         "noMicrophone": "No microphone found.",
-        "failed": "Speech recognition failed."
+        "failed": "Speech recognition failed.",
+        "tooShort": "That was too short. Hold the key, speak, then release.",
+        "tooQuiet": "Too quiet, or nothing heard. Check the microphone in the settings (“Test microphone”).",
+        "nothing": "Nothing understood. Please say it again.",
+        "busy": "A recording is already running."
       },
       "settings": {
         "unsupported": "Voice input is only available on macOS so far.",
@@ -947,7 +951,26 @@
         "shortcutTapDescription": "Press once to start recording, press again to finish.",
         "tapMode": "Tap instead of hold",
         "tapModeDescription": "For longer sentences, or when the key combination is awkward to hold.",
-        "privacy": "Recordings are processed on this Mac only and are not stored. Nothing goes to the internet except the one-time download of the speech model."
+        "privacy": "Recordings are processed on this Mac only. Only the most recent one is stored, and only by the microphone test or while “Keep the last recording” is on. Nothing goes to the internet except the one-time download of the speech model.",
+        "device": "Input device",
+        "deviceDescription": "The microphone to record from.",
+        "systemInput": "System input (as selected in macOS)",
+        "deviceIsSystemInput": "{{name}} (system input)",
+        "deviceMissing": "Selected microphone (not connected)",
+        "debug": "Keep the last recording",
+        "debugDescription": "Stores the most recent voice input as a WAV file on this Mac, to look into problems. The microphone test always stores its recording here:"
+      },
+      "test": {
+        "title": "Test microphone",
+        "description": "Records up to {{seconds}} seconds, shows the level and what was understood.",
+        "start": "Test microphone",
+        "stop": "Stop and evaluate",
+        "level": "Level",
+        "heard": "Understood: “{{text}}”",
+        "device": "{{device}} · {{rate}} Hz · {{channels}} channels · {{format}} · {{seconds}} s",
+        "levels": "Level per channel (mean / peak): {{levels}} · used: channel {{channel}}",
+        "speech": "Noise floor {{floor}} · speech level {{level}} · gain ×{{gain}}",
+        "saved": "Recording: {{path}}"
       }
     }
   }

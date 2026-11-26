@@ -20,22 +20,30 @@ export const VOICE_PERMISSION_EVENT = "adversum://voice-permission";
 
 export type VoicePermission = "granted" | "denied" | "undetermined";
 
-/** Why a voice input could not start. */
+/** Why a voice input could not start, or why a recording came to nothing. */
 export type VoiceErrorReason =
   | "disabled"
   | "noModel"
   | "permissionDenied"
   | "permissionRequested"
   | "noMicrophone"
-  | "failed";
+  | "failed"
+  /** The key was only brushed. */
+  | "tooShort"
+  /** Silence or steady noise: nothing that rises like speech. */
+  | "tooQuiet"
+  /** The model wrote nothing, or one of its stock phrases for silence. */
+  | "nothing";
 
 /** Payload of `VOICE_STATE_EVENT`. */
 export interface VoiceState {
   phase: "recording" | "transcribing" | "result" | "empty" | "error";
   /** "recording": ends by click or key press, not by releasing the shortcut. */
   manual: boolean;
-  /** "error" only. */
+  /** "error" and "empty". */
   reason?: VoiceErrorReason;
+  /** "error" only: the concrete message, as it is in the log. */
+  detail?: string;
   /** "result" only: what was said. */
   text?: string;
 }
@@ -65,6 +73,42 @@ export interface VoiceStatus {
   defaultModelDir: string;
   /** A download that is under way. */
   download: VoiceDownload | null;
+  /** Folder that holds the last recording kept for diagnosis. */
+  debugDir: string;
+}
+
+export interface VoiceDevice {
+  id: string;
+  name: string;
+  /** The system's current input device. */
+  isDefault: boolean;
+}
+
+/** Where a recording came from and what was done to it. */
+export interface VoiceTestResult {
+  outcome: "ok" | "tooShort" | "tooQuiet" | "nothing" | "noModel" | "failed";
+  /** What the model understood; empty unless `outcome` is "ok". */
+  text: string;
+  detail: string | null;
+  info: { device: string; sampleRate: number; channels: number; sampleFormat: string };
+  report: {
+    seconds: number;
+    channelRms: number[];
+    channelPeak: number[];
+    /** Counted from 0. */
+    usedChannel: number;
+    offset: number;
+    noiseFloor: number;
+    speechLevel: number;
+    hasSpeech: boolean;
+    gain: number;
+    rms: number;
+    peak: number;
+  };
+  /** WAV file as it came from the device. */
+  rawPath: string | null;
+  /** WAV file as it went to the model (16 kHz mono). */
+  preparedPath: string | null;
 }
 
 export function getVoiceStatus(): Promise<VoiceStatus> {
@@ -96,6 +140,23 @@ export function requestVoicePermission(): Promise<VoicePermission> {
 
 export function openVoicePrivacySettings(): Promise<void> {
   return invoke("adversum_voice_open_privacy");
+}
+
+export function getVoiceDevices(): Promise<VoiceDevice[]> {
+  return invoke("adversum_voice_devices");
+}
+
+/**
+ * Starts the microphone test. Rejects with a `VoiceErrorReason`, "busy", or
+ * the device's own message. The level arrives as `VOICE_LEVEL_EVENT`.
+ */
+export function startVoiceTest(): Promise<void> {
+  return invoke("adversum_voice_test_start");
+}
+
+/** Ends the microphone test and returns what was recorded and understood. */
+export function finishVoiceTest(): Promise<VoiceTestResult> {
+  return invoke("adversum_voice_test_finish");
 }
 
 /** Starts a recording that ends with `finishVoice` (button instead of key). */

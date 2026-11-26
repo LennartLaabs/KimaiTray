@@ -340,6 +340,35 @@ const commands: Record<string, (args: Args) => unknown> = {
       download: voiceDownload
         ? { model: voiceDownload.model, state: "progress", received: voiceDownload.received, total: voiceDownload.total }
         : null,
+      debugDir: "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug",
+    };
+  },
+  adversum_voice_devices: () => [
+    { id: "coreaudio:usb", name: "Trust USB microphone", isDefault: true },
+    { id: "coreaudio:teams", name: "Microsoft Teams Audio", isDefault: false },
+  ],
+  adversum_voice_test_start: () => {
+    let tick = 0;
+    stopVoiceRecording();
+    voiceRecording = setInterval(() => {
+      tick += 1;
+      emit("adversum://voice-level", 0.4 + 0.3 * Math.sin(tick / 2), "settings");
+    }, 60);
+  },
+  adversum_voice_test_finish: () => {
+    stopVoiceRecording();
+    return {
+      outcome: "ok",
+      text: "DUSW Projektmanagement, Gigi Call seit 10 Uhr.",
+      detail: null,
+      info: { device: "Trust USB microphone", sampleRate: 48000, channels: 2, sampleFormat: "f32" },
+      report: {
+        seconds: 3.4, channelRms: [0.0312, 0.0298], channelPeak: [0.41, 0.4], usedChannel: 0,
+        offset: 0.0012, noiseFloor: 0.0004, speechLevel: 0.052, hasSpeech: true, gain: 1.2,
+        rms: 0.04, peak: 0.5,
+      },
+      rawPath: "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug/last-raw.wav",
+      preparedPath: "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug/last-16k.wav",
     };
   },
   adversum_voice_download: ({ model }) => startVoiceDownload(model),

@@ -34,6 +34,10 @@ export interface AdversumSettings {
   /** Press once to start and once to stop, instead of holding the key. */
   voiceTapMode: boolean;
   shortcutVoice: string;
+  /** Identifier of the microphone to record from; empty means the system's input. */
+  voiceInputDevice: string;
+  /** Keep the last recording as WAV files for diagnosis. */
+  voiceDebug: boolean;
 }
 
 export const ADVERSUM_SETTINGS_EVENT = "adversum://settings-changed";
@@ -49,6 +53,8 @@ export const defaultAdversumSettings: AdversumSettings = {
   voiceModelDir: "",
   voiceTapMode: false,
   shortcutVoice: "Control+Alt+V",
+  voiceInputDevice: "",
+  voiceDebug: false,
 };
 
 const ALIAS_KINDS: readonly AliasKind[] = ["customers", "projects", "activities"];
@@ -130,6 +136,8 @@ export function normalizeAdversumSettings(raw: unknown): AdversumSettings {
     voiceModelDir: stringValue(value.voiceModelDir, "", 1024),
     voiceTapMode: value.voiceTapMode === true,
     shortcutVoice: stringValue(value.shortcutVoice, defaultAdversumSettings.shortcutVoice, 256),
+    voiceInputDevice: stringValue(value.voiceInputDevice, "", 512),
+    voiceDebug: value.voiceDebug === true,
   };
 }
 

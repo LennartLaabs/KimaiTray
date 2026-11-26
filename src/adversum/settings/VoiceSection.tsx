@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { usePlatform } from "../../platform";
-import { Toggle, buttonClass } from "../../settings/Controls";
+import { Select, Toggle, buttonClass } from "../../settings/Controls";
 import {
   RadioDot,
   SettingsList,
@@ -16,15 +16,18 @@ import {
   chooseVoiceModelDir,
   deleteVoiceModel,
   downloadVoiceModel,
+  getVoiceDevices,
   getVoiceStatus,
   openVoicePrivacySettings,
   requestVoicePermission,
   VOICE_DOWNLOAD_EVENT,
   VOICE_PERMISSION_EVENT,
+  type VoiceDevice,
   type VoiceDownload,
   type VoiceStatus,
 } from "../voice/voiceApi";
 import AcceleratorInput from "./AcceleratorInput";
+import MicrophoneTest from "./MicrophoneTest";
 import type { VoiceModel } from "./adversumSettings";
 import { useAdversumSettings } from "./useAdversumSettings";
 
@@ -50,6 +53,7 @@ export default function VoiceSection() {
   const platform = usePlatform();
   const { settings, update } = useAdversumSettings();
   const [status, setStatus] = useState<VoiceStatus | null>(null);
+  const [devices, setDevices] = useState<VoiceDevice[]>([]);
   const [download, setDownload] = useState<VoiceDownload | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
 
@@ -61,6 +65,8 @@ export default function VoiceSection() {
     } catch {
       setStatus(null);
     }
+    // A microphone may have been plugged in or pulled meanwhile.
+    setDevices(await getVoiceDevices().catch(() => []));
   }, []);
 
   // Also after the folder changed, and when the user comes back from the
@@ -147,6 +153,20 @@ export default function VoiceSection() {
     if (!(await update("shortcutVoice", accelerator))) setProblem("shortcut");
   };
 
+  const deviceOptions = [
+    { value: "", label: t("adversum.voice.settings.systemInput") },
+    ...devices.map((device) => ({
+      value: device.id,
+      label: device.isDefault
+        ? t("adversum.voice.settings.deviceIsSystemInput", { name: device.name })
+        : device.name,
+    })),
+    // A stored microphone that is not connected right now stays visible.
+    ...(settings.voiceInputDevice && !devices.some((device) => device.id === settings.voiceInputDevice)
+      ? [{ value: settings.voiceInputDevice, label: t("adversum.voice.settings.deviceMissing") }]
+      : []),
+  ];
+
   const used = status.models
     .filter((model) => model.installed)
     .reduce((sum, model) => sum + model.sizeBytes, 0);
@@ -193,6 +213,40 @@ export default function VoiceSection() {
               {t("adversum.voice.openPrivacy")}
             </button>
           )}
+        </SettingsRow>
+      </SettingsList>
+
+      <SettingsList title={t("adversum.voice.settings.microphone")}>
+        <SettingsRow
+          label={t("adversum.voice.settings.device")}
+          description={t("adversum.voice.settings.deviceDescription")}
+        >
+          <div className="w-[230px]">
+            <Select
+              ariaLabel={t("adversum.voice.settings.device")}
+              value={settings.voiceInputDevice}
+              onChange={(device) => void update("voiceInputDevice", device)}
+              options={deviceOptions}
+            />
+          </div>
+        </SettingsRow>
+        <MicrophoneTest />
+        <SettingsRow
+          label={t("adversum.voice.settings.debug")}
+          description={
+            <>
+              {t("adversum.voice.settings.debugDescription")}
+              <span data-voice-debug-dir className="block break-all font-mono text-[11px]">
+                {status.debugDir}
+              </span>
+            </>
+          }
+        >
+          <Toggle
+            ariaLabel={t("adversum.voice.settings.debug")}
+            checked={settings.voiceDebug}
+            onChange={(debug) => void update("voiceDebug", debug)}
+          />
         </SettingsRow>
       </SettingsList>
 

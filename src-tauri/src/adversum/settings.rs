@@ -16,7 +16,7 @@ const STORE_PATH: &str = "adversum.json";
 const SETTINGS_KEY: &str = "settings";
 const MAX_SETTINGS_BYTES: usize = 512 * 1024;
 const CHANGED_EVENT: &str = "adversum://settings-changed";
-const SETTINGS_KEYS: [&str; 10] = [
+const SETTINGS_KEYS: [&str; 12] = [
     "customerIndicator",
     "logoDevToken",
     "shortcutQuickEntry",
@@ -27,6 +27,8 @@ const SETTINGS_KEYS: [&str; 10] = [
     "voiceModelDir",
     "voiceTapMode",
     "shortcutVoice",
+    "voiceInputDevice",
+    "voiceDebug",
 ];
 const WRITER_WINDOWS: [&str; 1] = ["settings"];
 /// Windows that confirm quick actions may add aliases they learned, and
@@ -74,7 +76,7 @@ fn apply_patch(
 /// frontend when it reads them.
 fn validate_voice(values: &Map<String, Value>) -> Result<(), String> {
     use super::voice::{models, ENABLED_KEY, TAP_MODE_KEY};
-    for key in [ENABLED_KEY, TAP_MODE_KEY] {
+    for key in [ENABLED_KEY, TAP_MODE_KEY, "voiceDebug"] {
         if values.get(key).is_some_and(|value| !value.is_boolean()) {
             return Err("Invalid voice setting".into());
         }
@@ -82,6 +84,11 @@ fn validate_voice(values: &Map<String, Value>) -> Result<(), String> {
     if let Some(model) = values.get(models::MODEL_KEY) {
         if model.as_str().and_then(models::spec).is_none() {
             return Err("Unknown speech model".into());
+        }
+    }
+    if let Some(device) = values.get("voiceInputDevice") {
+        if device.as_str().is_none_or(|id| id.len() > 512) {
+            return Err("Invalid microphone".into());
         }
     }
     if let Some(dir) = values.get(models::MODEL_DIR_KEY) {
@@ -247,7 +254,8 @@ mod tests {
     fn voice_settings_are_checked() {
         let mut settings = Map::new();
         let ok = json!({"voiceEnabled": true, "voiceModel": "base", "voiceModelDir": "",
-            "voiceTapMode": false, "shortcutVoice": "Control+Alt+V"});
+            "voiceTapMode": false, "shortcutVoice": "Control+Alt+V",
+            "voiceInputDevice": "coreaudio:abc", "voiceDebug": true});
         apply_patch(&mut settings, object(ok)).unwrap();
         assert_eq!(settings["voiceModel"], "base");
         for bad in [
@@ -257,6 +265,9 @@ mod tests {
             json!({"voiceModel": 3}),
             json!({"voiceModelDir": "relative"}),
             json!({"voiceModelDir": 7}),
+            json!({"voiceDebug": "on"}),
+            json!({"voiceInputDevice": 3}),
+            json!({"voiceInputDevice": "x".repeat(513)}),
         ] {
             assert!(apply_patch(&mut settings, object(bad)).is_err());
         }

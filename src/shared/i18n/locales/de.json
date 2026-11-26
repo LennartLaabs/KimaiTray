@@ -882,7 +882,7 @@
       "description": "Taste halten, sagen, woran du arbeitest, loslassen: Der passende Timer startet. Die Erkennung läuft vollständig auf diesem Mac.",
       "speak": "Per Sprache eingeben",
       "listening": "Ich höre zu …",
-      "hintHold": "Loslassen zum Auswerten · esc bricht ab",
+      "hintHold": "Loslassen zum Auswerten · ↵ geht auch · esc bricht ab",
       "hintManual": "↵ oder „Fertig“ zum Auswerten · esc bricht ab",
       "done": "Fertig",
       "transcribing": "Wird ausgewertet …",
@@ -898,7 +898,11 @@
         "permissionDenied": "Kein Zugriff auf das Mikrofon.",
         "permissionRequested": "Bitte den Mikrofon-Zugriff erlauben und dann noch einmal sprechen.",
         "noMicrophone": "Kein Mikrofon gefunden.",
-        "failed": "Die Spracherkennung ist fehlgeschlagen."
+        "failed": "Die Spracherkennung ist fehlgeschlagen.",
+        "tooShort": "Das war zu kurz. Taste halten, sprechen, dann loslassen.",
+        "tooQuiet": "Zu leise oder nichts gehört. Mikrofon in den Einstellungen prüfen („Mikrofon testen“).",
+        "nothing": "Nichts verstanden. Bitte noch einmal sprechen.",
+        "busy": "Es läuft gerade schon eine Aufnahme."
       },
       "settings": {
         "unsupported": "Die Sprachsteuerung gibt es bisher nur unter macOS.",
@@ -947,7 +951,26 @@
         "shortcutTapDescription": "Einmal drücken startet die Aufnahme, noch einmal drücken wertet aus.",
         "tapMode": "Tippen statt Halten",
         "tapModeDescription": "Für längere Sätze oder wenn sich die Tastenkombination schlecht halten lässt.",
-        "privacy": "Aufnahmen werden nur auf diesem Mac ausgewertet und nicht gespeichert. Ins Internet geht nichts außer dem einmaligen Laden des Sprachmodells."
+        "privacy": "Aufnahmen werden nur auf diesem Mac ausgewertet. Gespeichert wird nur die jeweils letzte Aufnahme, und nur beim Mikrofontest oder wenn „Letzte Aufnahme aufbewahren“ an ist. Ins Internet geht nichts außer dem einmaligen Laden des Sprachmodells.",
+        "device": "Eingabegerät",
+        "deviceDescription": "Von welchem Mikrofon aufgenommen wird.",
+        "systemInput": "Systemeingang (wie in macOS gewählt)",
+        "deviceIsSystemInput": "{{name}} (Systemeingang)",
+        "deviceMissing": "Gewähltes Mikrofon (nicht angeschlossen)",
+        "debug": "Letzte Aufnahme aufbewahren",
+        "debugDescription": "Speichert die jeweils letzte Spracheingabe als WAV-Datei auf diesem Mac, um Probleme nachzuvollziehen. Der Mikrofontest speichert seine Aufnahme immer hier:"
+      },
+      "test": {
+        "title": "Mikrofon testen",
+        "description": "Nimmt bis zu {{seconds}} Sekunden auf, zeigt den Pegel und was erkannt wurde.",
+        "start": "Mikrofon testen",
+        "stop": "Stopp und auswerten",
+        "level": "Pegel",
+        "heard": "Erkannt: „{{text}}“",
+        "device": "{{device}} · {{rate}} Hz · {{channels}} Kanäle · {{format}} · {{seconds}} s",
+        "levels": "Pegel je Kanal (Mittel / Spitze): {{levels}} · verwendet: Kanal {{channel}}",
+        "speech": "Grundrauschen {{floor}} · Sprachpegel {{level}} · Verstärkung ×{{gain}}",
+        "saved": "Aufnahme: {{path}}"
       }
     }
   }

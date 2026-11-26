@@ -11,6 +11,8 @@
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 mod audio;
+#[cfg(target_os = "macos")]
+mod guard;
 pub(crate) mod models;
 #[cfg(target_os = "macos")]
 mod permission;
@@ -73,28 +75,85 @@ fn require_window(window: &WebviewWindow, label: &str) -> Result<(), String> {
     }
 }
 
-/// The key was pressed: starts a recording, or ends it in tap mode.
+/// What can be asked of the voice session from outside.
+#[cfg(target_os = "macos")]
+enum Request {
+    KeyPressed,
+    KeyReleased,
+    Start,
+    Finish,
+}
+
+/// A key held for less than this was tapped: the recording then goes on
+/// until the key is pressed again.
+#[cfg(target_os = "macos")]
+const TAP: std::time::Duration = std::time::Duration::from_millis(350);
+
+/// Hands a request to the voice thread. Starting a recording opens the audio
+/// device, which must not happen on the main thread (where shortcut events
+/// arrive), and requests must be handled in the order they came in, or a
+/// quick release could overtake its press.
+#[cfg(target_os = "macos")]
+fn request(app: &AppHandle, request: Request) {
+    use std::sync::mpsc::{channel, Sender};
+    use std::sync::OnceLock;
+    use std::time::Instant;
+
+    static QUEUE: OnceLock<Mutex<Sender<(AppHandle, Request)>>> = OnceLock::new();
+    let queue = QUEUE.get_or_init(|| {
+        let (sender, receiver) = channel::<(AppHandle, Request)>();
+        std::thread::spawn(move || {
+            let mut pressed_at: Option<Instant> = None;
+            for (app, request) in receiver {
+                let tap_mode = tap_mode(&super::settings::read(&app));
+                match request {
+                    Request::KeyPressed => {
+                        log::info!("Voice key pressed");
+                        if session::is_recording() {
+                            // Second press of a tap.
+                            pressed_at = None;
+                            session::finish(&app);
+                        } else {
+                            pressed_at = Some(Instant::now());
+                            session::begin(&app, tap_mode);
+                        }
+                    }
+                    Request::KeyReleased => {
+                        let held = pressed_at.take().map(|at| at.elapsed());
+                        log::info!("Voice key released after {held:?}");
+                        match held {
+                            // The press that ended a recording, or tap mode.
+                            None => {}
+                            Some(_) if tap_mode => {}
+                            Some(held) if held < TAP => session::make_manual(&app),
+                            Some(_) => session::finish(&app),
+                        }
+                    }
+                    Request::Start => session::begin(&app, true),
+                    Request::Finish => session::finish(&app),
+                }
+            }
+        });
+        Mutex::new(sender)
+    });
+    let _ = queue
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .send((app.clone(), request));
+}
+
+/// The voice key was pressed. Held, it records until released; tapped (or
+/// in tap mode), it records until pressed again.
 pub(crate) fn shortcut_pressed(app: &AppHandle) {
     #[cfg(target_os = "macos")]
-    {
-        if !tap_mode(&super::settings::read(app)) {
-            session::begin(app, false);
-        } else if session::is_recording() {
-            session::finish(app);
-        } else {
-            session::begin(app, true);
-        }
-    }
+    request(app, Request::KeyPressed);
     #[cfg(not(target_os = "macos"))]
     let _ = app;
 }
 
-/// The key was released: ends the recording, unless tapping does that.
 pub(crate) fn shortcut_released(app: &AppHandle) {
     #[cfg(target_os = "macos")]
-    if !tap_mode(&super::settings::read(app)) {
-        session::finish(app);
-    }
+    request(app, Request::KeyReleased);
     #[cfg(not(target_os = "macos"))]
     let _ = app;
 }
@@ -118,6 +177,8 @@ pub struct VoiceStatus {
     model_dir: String,
     default_model_dir: String,
     download: Option<models::DownloadProgress>,
+    /// Where the last recording is kept for diagnosis.
+    debug_dir: String,
 }
 
 #[tauri::command]
@@ -131,6 +192,10 @@ pub fn adversum_voice_status(app: AppHandle) -> Result<VoiceStatus, String> {
     );
     #[cfg(not(target_os = "macos"))]
     let (permission, live_text) = ("denied", false);
+    #[cfg(target_os = "macos")]
+    let debug_dir = session::debug_dir(&app)?.to_string_lossy().into_owned();
+    #[cfg(not(target_os = "macos"))]
+    let debug_dir = String::new();
     Ok(VoiceStatus {
         supported: cfg!(target_os = "macos"),
         permission,
@@ -139,7 +204,66 @@ pub fn adversum_voice_status(app: AppHandle) -> Result<VoiceStatus, String> {
         model_dir: dir.to_string_lossy().into_owned(),
         default_model_dir: models::default_dir(&app)?.to_string_lossy().into_owned(),
         download: models::active_download(),
+        debug_dir,
     })
+}
+
+/// The microphones that can be chosen in the settings.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn adversum_voice_devices() -> Result<Vec<recorder::InputDevice>, String> {
+    tauri::async_runtime::spawn_blocking(recorder::devices)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn adversum_voice_devices() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
+
+/// Starts the microphone test of the settings page. Errors are codes the
+/// page translates ("busy", "permissionDenied", "permissionRequested",
+/// "noMicrophone") or the device's own message.
+#[tauri::command]
+pub async fn adversum_voice_test_start(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    require_window(&window, "settings")?;
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(move || session::test_begin(&app))
+            .await
+            .map_err(|error| error.to_string())?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("Voice input is not available on this platform".into())
+    }
+}
+
+/// Ends the microphone test: keeps the recording as WAV files, transcribes
+/// it and reports what was found.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn adversum_voice_test_finish(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<session::VoiceTest, String> {
+    require_window(&window, "settings")?;
+    tauri::async_runtime::spawn_blocking(move || session::test_finish(&app))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn adversum_voice_test_finish(window: WebviewWindow) -> Result<(), String> {
+    require_window(&window, "settings")?;
+    Err("Voice input is not available on this platform".into())
 }
 
 #[tauri::command]
@@ -219,7 +343,7 @@ pub fn adversum_voice_open_privacy(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn adversum_voice_start(app: AppHandle) {
     #[cfg(target_os = "macos")]
-    session::begin(&app, true);
+    request(&app, Request::Start);
     #[cfg(not(target_os = "macos"))]
     let _ = app;
 }
@@ -227,7 +351,7 @@ pub fn adversum_voice_start(app: AppHandle) {
 #[tauri::command]
 pub fn adversum_voice_finish(app: AppHandle) {
     #[cfg(target_os = "macos")]
-    session::finish(&app);
+    request(&app, Request::Finish);
     #[cfg(not(target_os = "macos"))]
     let _ = app;
 }

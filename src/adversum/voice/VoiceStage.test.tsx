@@ -108,7 +108,6 @@ describe("while recording", () => {
     expect(document.activeElement).toBe(container.querySelector("[data-voice-phase='recording']"));
     expect(screen.getByRole("status").textContent).toBe("adversum.voice.listening");
     expect(screen.getByText("adversum.voice.hintHold")).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
 
     act(() => handlers[VOICE_LEVEL_EVENT]!({ payload: 0.5 }));
     expect(container.querySelector("[data-voice-level='0.50']")).not.toBeNull();
@@ -118,16 +117,17 @@ describe("while recording", () => {
     expect(screen.getByRole("status").textContent).toBe("DUSW Projekt");
   });
 
-  it("is ended by releasing the key, so Enter does nothing; Escape cancels", () => {
+  it("can always be ended by Enter or the button, should the key release get lost", () => {
     show({ phase: "recording" });
     press("Enter");
-    expect(mocks.finishVoice).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "adversum.voice.done" }));
+    expect(mocks.finishVoice).toHaveBeenCalledTimes(2);
     press("Escape");
     expect(mocks.cancelVoice).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("is ended by Enter or the button when started by a click or in tap mode", () => {
+  it("says how it ends when started by a click, a tap or in tap mode", () => {
     show({ phase: "recording", manual: true });
     expect(screen.getByText("adversum.voice.hintManual")).toBeTruthy();
     press("Enter");
@@ -162,6 +162,7 @@ describe("while transcribing and when nothing came of it", () => {
     expect(container.querySelector("[data-voice-problem='empty']")?.textContent).toBe(
       "adversum.voice.problem.empty",
     );
+    expect(container.querySelector("[data-voice-detail]")).toBeNull();
     press("Escape");
     // Nothing runs any more, so there is nothing to cancel.
     expect(mocks.cancelVoice).not.toHaveBeenCalled();
@@ -202,6 +203,22 @@ describe("while transcribing and when nothing came of it", () => {
       />,
     );
     expect(container.querySelector("[data-voice-problem='failed']")).not.toBeNull();
+  });
+
+  it("names the reason nothing came of a recording, and the concrete error", () => {
+    const quiet = show({ phase: "empty", reason: "tooQuiet" });
+    expect(screen.getByRole("alert").textContent).toBe("adversum.voice.problem.tooQuiet");
+    quiet.unmount();
+
+    const { container } = show({
+      phase: "error",
+      reason: "failed",
+      detail: "Whisper: Generic whisper error. Error code: -6",
+    });
+    expect(container.querySelector("[data-voice-problem='failed']")).not.toBeNull();
+    expect(container.querySelector("[data-voice-detail]")?.textContent).toBe(
+      "Whisper: Generic whisper error. Error code: -6",
+    );
   });
 });
 

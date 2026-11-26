@@ -175,6 +175,8 @@ pub fn run() {
                     log::LevelFilter::Info
                 })
                 .level_for("tauri_plugin_updater", log::LevelFilter::Info)
+                // ADVERSUM: whisper.cpp is chatty; keep its warnings and errors.
+                .level_for("whisper_rs", log::LevelFilter::Warn)
                 .build(),
         )
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -247,6 +249,9 @@ pub fn run() {
             adversum::quick::adversum_quick_resize,
             adversum::settings::adversum_learn_alias,
             adversum::voice::adversum_voice_status,
+            adversum::voice::adversum_voice_devices,
+            adversum::voice::adversum_voice_test_start,
+            adversum::voice::adversum_voice_test_finish,
             adversum::voice::adversum_voice_download,
             adversum::voice::adversum_voice_cancel_download,
             adversum::voice::adversum_voice_delete_model,

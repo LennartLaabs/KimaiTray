@@ -40,6 +40,8 @@ describe("normalizeAdversumSettings", () => {
         voiceModelDir: "/Volumes/Extern/Modelle",
         voiceTapMode: true,
         shortcutVoice: "Alt+F5",
+        voiceInputDevice: "coreaudio:usb",
+        voiceDebug: true,
       }),
     ).toEqual({
       customerIndicator: "dots",
@@ -52,6 +54,8 @@ describe("normalizeAdversumSettings", () => {
       voiceModelDir: "/Volumes/Extern/Modelle",
       voiceTapMode: true,
       shortcutVoice: "Alt+F5",
+      voiceInputDevice: "coreaudio:usb",
+      voiceDebug: true,
     });
     expect(
       normalizeAdversumSettings({
@@ -64,6 +68,8 @@ describe("normalizeAdversumSettings", () => {
         voiceModelDir: 7,
         voiceTapMode: 1,
         shortcutVoice: null,
+        voiceInputDevice: "x".repeat(513),
+        voiceDebug: 1,
       }),
     ).toEqual(defaultAdversumSettings);
     expect(defaultAdversumSettings).toMatchObject({

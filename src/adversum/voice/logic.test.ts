@@ -15,12 +15,15 @@ import {
   deleteVoiceModel,
   downloadVoiceModel,
   finishVoice,
+  finishVoiceTest,
+  getVoiceDevices,
   getVoiceStatus,
   learnAlias,
   openVoicePrivacySettings,
   requestVoicePermission,
   setVoiceVocabulary,
   startVoice,
+  startVoiceTest,
 } from "./voiceApi";
 
 const now = new Date(2026, 10, 26, 14, 20);
@@ -247,7 +250,15 @@ describe("voiceApi", () => {
     await cancelVoice();
     await setVoiceVocabulary("Kunden: DUSW.");
     await learnAlias("conn", "customers", 3, "kaka");
-    expect(mocks.invoke.mock.calls).toEqual([
+    await getVoiceDevices();
+    await startVoiceTest();
+    await finishVoiceTest();
+    expect(mocks.invoke.mock.calls.slice(-3)).toEqual([
+      ["adversum_voice_devices"],
+      ["adversum_voice_test_start"],
+      ["adversum_voice_test_finish"],
+    ]);
+    expect(mocks.invoke.mock.calls.slice(0, -3)).toEqual([
       ["adversum_voice_status"],
       ["adversum_voice_download", { model: "small" }],
       ["adversum_voice_cancel_download"],

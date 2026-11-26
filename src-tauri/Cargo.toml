@@ -48,7 +48,7 @@ tauri-plugin-single-instance = { version = "2.5.5", features = ["deep-link"] }
 # ADVERSUM: local voice input (microphone capture, whisper.cpp with Metal,
 # folder picker for the model location). macOS only for now.
 cpal = "0.18"
-whisper-rs = { version = "0.16", features = ["metal"] }
+whisper-rs = { version = "0.16", features = ["metal", "log_backend"] }
 rfd = { version = "0.18", default-features = false }
 # ADVERSUM: completion handler of the microphone permission request.
 block2 = "0.6"
