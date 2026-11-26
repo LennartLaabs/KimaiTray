@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   chooseVoiceModelDir: vi.fn(),
   requestVoicePermission: vi.fn(),
   openVoicePrivacySettings: vi.fn(),
+  reloadModelInternally: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -46,6 +47,7 @@ vi.mock("../voice/voiceApi", async (original) => ({
   chooseVoiceModelDir: mocks.chooseVoiceModelDir,
   requestVoicePermission: mocks.requestVoicePermission,
   openVoicePrivacySettings: mocks.openVoicePrivacySettings,
+  reloadModelInternally: mocks.reloadModelInternally,
 }));
 
 import { VOICE_DOWNLOAD_EVENT, VOICE_PERMISSION_EVENT, type VoiceStatus } from "../voice/voiceApi";
@@ -64,6 +66,8 @@ const baseStatus: VoiceStatus = {
   defaultModelDir: "/Users/l/Library/Application Support/io.adversum.kimaitray/adversum/models",
   download: null,
   debugDir: "/Users/l/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug",
+  activeModel: null,
+  modelVolume: null,
 };
 
 let status: VoiceStatus;
@@ -300,6 +304,45 @@ describe("VoiceSection", () => {
     fireEvent.click(within(row("small")).getByRole("button", { name: /deleteLabel/ }));
     await act(async () => undefined);
     expect(within(row("small")).getByText("adversum.voice.settings.installed")).toBeTruthy();
+  });
+
+  it("makes the model that is there the chosen one when the chosen one is gone", async () => {
+    // Small was deleted and Large v3 Turbo downloaded; the setting still says Small.
+    status = { ...baseStatus, models: installed("large-v3-turbo"), activeModel: "large-v3-turbo" };
+    await renderPage();
+    expect(mocks.settings.update).toHaveBeenCalledWith("voiceModel", "large-v3-turbo");
+
+    // Not while the chosen model is still being downloaded, and not when
+    // it is there.
+    cleanup();
+    mocks.settings.update.mockClear();
+    status = {
+      ...status,
+      download: { model: "small", state: "progress", received: 1, total: 10 },
+    };
+    await renderPage();
+    cleanup();
+    status = { ...baseStatus, models: installed("small", "base"), activeModel: "small" };
+    await renderPage();
+    expect(mocks.settings.update).not.toHaveBeenCalled();
+  });
+
+  it("says when the models lie on a disk that is not connected, and loads again internally", async () => {
+    mocks.reloadModelInternally.mockResolvedValue(undefined);
+    status = { ...baseStatus, modelDir: "/Volumes/Extern/Modelle", modelVolume: "Extern" };
+    useSettings({ voiceEnabled: true, voiceModelDir: "/Volumes/Extern/Modelle" });
+    await renderPage();
+    expect(document.querySelector("[data-voice-volume]")!.textContent).toBe(
+      "adversum.voice.problem.modelVolume:Extern",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "adversum.voice.useInternal" }));
+    expect(mocks.reloadModelInternally).toHaveBeenCalledTimes(1);
+
+    // A failing call is no reason to break the page.
+    mocks.reloadModelInternally.mockRejectedValue(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "adversum.voice.useInternal" }));
+    await act(async () => undefined);
+    expect(document.querySelector("[data-voice-volume]")).not.toBeNull();
   });
 
   it("shows the microphone permission and the way to change it", async () => {

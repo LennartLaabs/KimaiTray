@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   cancelVoice: vi.fn(),
   finishVoice: vi.fn(),
   openVoicePrivacySettings: vi.fn(),
+  reloadModelInternally: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -26,6 +27,7 @@ vi.mock("./voiceApi", async (original) => ({
   cancelVoice: mocks.cancelVoice,
   finishVoice: mocks.finishVoice,
   openVoicePrivacySettings: mocks.openVoicePrivacySettings,
+  reloadModelInternally: mocks.reloadModelInternally,
 }));
 
 import { VOICE_LEVEL_EVENT, VOICE_PARTIAL_EVENT, type VoiceState } from "./voiceApi";
@@ -170,6 +172,22 @@ describe("while transcribing and when nothing came of it", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     act(() => void vi.advanceTimersByTime(MESSAGE_MS));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("names the disk the model lies on when it is not connected, and offers the way out", async () => {
+    mocks.reloadModelInternally.mockRejectedValue(new Error("offline"));
+    show({ phase: "error", reason: "modelVolume", detail: "Adversum" });
+    expect(screen.getByRole("alert").textContent).toBe(
+      "adversum.voice.problem.modelVolume:Adversum",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "adversum.voice.useInternal" }));
+    await act(async () => undefined);
+    expect(mocks.reloadModelInternally).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Without a name the sentence still stands.
+    cleanup();
+    show({ phase: "error", reason: "modelVolume" });
+    expect(screen.getByRole("alert").textContent).toBe("adversum.voice.problem.modelVolume:");
   });
 
   it("explains what is missing and leads to the microphone setting", async () => {

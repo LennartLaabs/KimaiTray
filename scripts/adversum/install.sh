@@ -44,6 +44,7 @@ fi
 [ -d "$BUILT" ] || { echo "No build found at $BUILT" >&2; exit 1; }
 adversum_add_keyhelper "$BUILT"
 adversum_check_signature "$BUILT"
+adversum_hide_build_copies
 
 echo "==> Quitting the running app"
 # Matches the installed app and a copy started from a build folder alike.

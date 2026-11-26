@@ -24,6 +24,8 @@ export type VoicePermission = "granted" | "denied" | "undetermined";
 export type VoiceErrorReason =
   | "disabled"
   | "noModel"
+  /** The models lie on a volume that is not mounted; `detail` names it. */
+  | "modelVolume"
   | "permissionDenied"
   | "permissionRequested"
   | "noMicrophone"
@@ -75,6 +77,10 @@ export interface VoiceStatus {
   download: VoiceDownload | null;
   /** Folder that holds the last recording kept for diagnosis. */
   debugDir: string;
+  /** The model in use: the chosen one, or another installed one when that is missing. */
+  activeModel: VoiceModel | null;
+  /** The model folder lies on this volume, which is not mounted. */
+  modelVolume: string | null;
 }
 
 export interface VoiceDevice {
@@ -136,6 +142,14 @@ export function chooseVoiceModelDir(): Promise<string | null> {
 /** Lets macOS ask for the microphone if it has not yet; returns the state now. */
 export function requestVoicePermission(): Promise<VoicePermission> {
   return invoke("adversum_voice_request_permission");
+}
+
+/**
+ * Goes back to the model folder on the internal disk and downloads the
+ * chosen model there. Resolves when the download has ended.
+ */
+export function reloadModelInternally(): Promise<void> {
+  return invoke("adversum_voice_use_internal");
 }
 
 export function openVoicePrivacySettings(): Promise<void> {

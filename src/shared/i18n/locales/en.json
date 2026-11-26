@@ -919,7 +919,8 @@
         "tooShort": "That was too short. Hold the key, speak, then release.",
         "tooQuiet": "Too quiet, or nothing heard. Check the microphone in the settings (“Test microphone”).",
         "nothing": "Nothing understood. Please say it again.",
-        "busy": "A recording is already running."
+        "busy": "A recording is already running.",
+        "modelVolume": "The speech model is on \"{{volume}}\", which is not connected."
       },
       "settings": {
         "unsupported": "Voice input is only available on macOS so far.",
@@ -988,7 +989,8 @@
         "levels": "Level per channel (mean / peak): {{levels}} · used: channel {{channel}}",
         "speech": "Noise floor {{floor}} · speech level {{level}} · gain ×{{gain}}",
         "saved": "Recording: {{path}}"
-      }
+      },
+      "useInternal": "Download again to internal storage"
     },
     "multi": {
       "title": "Review and enter · {{count}}",

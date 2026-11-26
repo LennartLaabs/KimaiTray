@@ -49,6 +49,24 @@ adversum_add_keyhelper() {
   echo "==> Key helper: $(codesign -dvvv "$1/Contents/MacOS/kimaitray-keyhelper" 2>&1 | sed -n 's/^CDHash=//p')"
 }
 
+# Keeps the copies in the build folder out of Spotlight and Launch Services.
+#
+# Every build leaves an app bundle with the app's name and identifier under
+# src-tauri/target. Spotlight and "Open With" offer those like the installed
+# app, and an older one of them was started that way and ran old code on the
+# real data (2026-11-26). Nothing is deleted: the folder is marked as not to
+# be indexed, and the bundles are taken off the list of known apps.
+adversum_hide_build_copies() {
+  [ -d src-tauri/target ] || return 0
+  touch src-tauri/target/.metadata_never_index
+  lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  [ -x "$lsregister" ] || return 0
+  find src-tauri/target -maxdepth 6 -name "*.app" -type d -path "*/bundle/macos/*" 2>/dev/null |
+    while IFS= read -r copy; do
+      "$lsregister" -u "$copy" >/dev/null 2>&1 || true
+    done
+}
+
 # Prints how an app bundle is signed and fails if the signature is broken.
 adversum_check_signature() {
   codesign --verify --strict "$1" || {

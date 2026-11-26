@@ -237,10 +237,16 @@ pub(super) fn begin(app: &AppHandle, manual: bool) {
     if !super::enabled(&settings) {
         return fail(app, "disabled", None);
     }
-    let model = models::selected(&settings);
-    let model_path: PathBuf = match models::configured_dir(app, &settings) {
-        Ok(dir) if models::is_installed(&dir, model) => models::model_path(&dir, model),
-        _ => return fail(app, "noModel", None),
+    let Some(model_path) = installed_model(app, &settings) else {
+        // A folder on a disk that is not plugged in is a different problem
+        // than a model that was never downloaded.
+        let volume = models::configured_dir(app, &settings)
+            .ok()
+            .and_then(|dir| models::missing_volume(&dir));
+        return match volume {
+            Some(volume) => fail(app, "modelVolume", Some(volume)),
+            None => fail(app, "noModel", None),
+        };
     };
     if let Err(reason) = check_permission(app) {
         return fail(app, reason, None);
@@ -396,10 +402,20 @@ fn recognize(
     }
 }
 
+/// The model file to transcribe with: the chosen model, or another one that
+/// is installed when the chosen one is not.
 fn installed_model(app: &AppHandle, settings: &Map<String, Value>) -> Option<PathBuf> {
-    let model = models::selected(settings);
     let dir = models::configured_dir(app, settings).ok()?;
-    models::is_installed(&dir, model).then(|| models::model_path(&dir, model))
+    let model = models::usable(&dir, settings)?;
+    let chosen = models::selected(settings);
+    if model.id != chosen.id {
+        log::info!(
+            "Voice input: the chosen model {} is not installed, using {}",
+            chosen.id,
+            model.id
+        );
+    }
+    Some(models::model_path(&dir, model))
 }
 
 /// Ends the recording and transcribes it. Does nothing without a recording.

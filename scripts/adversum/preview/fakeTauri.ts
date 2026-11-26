@@ -341,6 +341,8 @@ const commands: Record<string, (args: Args) => unknown> = {
         ? { model: voiceDownload.model, state: "progress", received: voiceDownload.received, total: voiceDownload.total }
         : null,
       debugDir: "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug",
+      activeModel: voice.installed[0] ?? null,
+      modelVolume: null,
     };
   },
   // Several entries from one sentence: no language model in the browser,

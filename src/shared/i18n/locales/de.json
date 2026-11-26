@@ -919,7 +919,8 @@
         "tooShort": "Das war zu kurz. Taste halten, sprechen, dann loslassen.",
         "tooQuiet": "Zu leise oder nichts gehört. Mikrofon in den Einstellungen prüfen („Mikrofon testen“).",
         "nothing": "Nichts verstanden. Bitte noch einmal sprechen.",
-        "busy": "Es läuft gerade schon eine Aufnahme."
+        "busy": "Es läuft gerade schon eine Aufnahme.",
+        "modelVolume": "Das Sprachmodell liegt auf „{{volume}}“, das nicht angeschlossen ist."
       },
       "settings": {
         "unsupported": "Die Sprachsteuerung gibt es bisher nur unter macOS.",
@@ -988,7 +989,8 @@
         "levels": "Pegel je Kanal (Mittel / Spitze): {{levels}} · verwendet: Kanal {{channel}}",
         "speech": "Grundrauschen {{floor}} · Sprachpegel {{level}} · Verstärkung ×{{gain}}",
         "saved": "Aufnahme: {{path}}"
-      }
+      },
+      "useInternal": "Neu laden auf internen Speicher"
     },
     "multi": {
       "title": "Prüfen und eintragen · {{count}}",

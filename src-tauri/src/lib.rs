@@ -132,6 +132,12 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
 
+    // ADVERSUM: a copy in a build folder or on a disk image hands over to the
+    // installed app instead of running next to it with older code.
+    if adversum::defer_to_installed_copy() {
+        return;
+    }
+
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
@@ -262,6 +268,7 @@ pub fn run() {
             adversum::voice::adversum_voice_finish,
             adversum::voice::adversum_voice_cancel,
             adversum::voice::adversum_voice_set_vocabulary,
+            adversum::voice::adversum_voice_use_internal,
             adversum::multi::adversum_multi_status,
             adversum::multi::adversum_multi_extract,
         ])

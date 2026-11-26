@@ -158,6 +158,23 @@ fn add_alias(
 
 /// Stores an alias that voice input learned from a correction: the spoken
 /// word that should have named this customer, project or activity.
+/// Sets one setting from the native side and tells every window.
+pub(crate) fn store_value(app: &AppHandle, key: &str, value: Value) -> Result<(), String> {
+    let _transaction = MUTATION
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let store = app.store(STORE_PATH).map_err(|error| error.to_string())?;
+    let mut settings = match store.get(SETTINGS_KEY) {
+        Some(Value::Object(settings)) => settings,
+        _ => Map::new(),
+    };
+    settings.insert(key.to_string(), value);
+    let value = Value::Object(settings);
+    persist_store_value(store.as_ref(), SETTINGS_KEY, Some(value.clone()))?;
+    let _ = app.emit(CHANGED_EVENT, value);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn adversum_learn_alias(
     app: AppHandle,

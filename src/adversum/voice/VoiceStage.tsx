@@ -13,6 +13,7 @@ import {
   cancelVoice,
   finishVoice,
   openVoicePrivacySettings,
+  reloadModelInternally,
   VOICE_LEVEL_EVENT,
   VOICE_PARTIAL_EVENT,
   type VoiceState,
@@ -207,8 +208,10 @@ function Message({ state, onClose }: { state: VoiceState; onClose: () => void })
         data-voice-problem={reason}
         className="min-w-0 flex-1 text-[14px] text-gray-700 dark:text-gray-300"
       >
-        {t(`adversum.voice.problem.${reason}`)}
-        {state.detail && (
+        {reason === "modelVolume"
+          ? t("adversum.voice.problem.modelVolume", { volume: state.detail ?? "" })
+          : t(`adversum.voice.problem.${reason}`)}
+        {state.detail && reason !== "modelVolume" && (
           <span
             data-voice-detail
             className="mt-0.5 block break-words font-mono text-[11px] text-gray-500 dark:text-gray-400"
@@ -217,6 +220,19 @@ function Message({ state, onClose }: { state: VoiceState; onClose: () => void })
           </span>
         )}
       </span>
+      {reason === "modelVolume" && (
+        <button
+          type="button"
+          onClick={() => {
+            // The download goes on after the overlay is gone.
+            void reloadModelInternally().catch(ignore);
+            onClose();
+          }}
+          className="shrink-0 rounded-lg bg-[var(--accent)] px-2.5 py-1 text-[13px] font-semibold text-white hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          {t("adversum.voice.useInternal")}
+        </button>
+      )}
       {reason === "permissionDenied" && (
         <button
           type="button"

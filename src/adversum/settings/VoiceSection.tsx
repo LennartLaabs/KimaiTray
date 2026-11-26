@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { usePlatform } from "../../platform";
@@ -25,6 +25,7 @@ import {
   type VoiceDevice,
   type VoiceDownload,
   type VoiceStatus,
+  reloadModelInternally,
 } from "../voice/voiceApi";
 import AcceleratorInput from "./AcceleratorInput";
 import MicrophoneTest from "./MicrophoneTest";
@@ -57,11 +58,23 @@ export default function VoiceSection() {
   const [download, setDownload] = useState<VoiceDownload | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
 
+  const chosen = useRef(settings.voiceModel);
+  chosen.current = settings.voiceModel;
+  const updateRef = useRef(update);
+  updateRef.current = update;
+
   const refresh = useCallback(async () => {
     try {
       const next = await getVoiceStatus();
       setStatus(next);
       setDownload(next.download);
+      // The choice follows the files: when the chosen model is gone (deleted,
+      // or another one was downloaded instead) and nothing is being loaded,
+      // the one voice input really uses becomes the chosen one.
+      const missing = !next.models.some((model) => model.id === chosen.current && model.installed);
+      if (missing && next.activeModel && !next.download) {
+        void updateRef.current("voiceModel", next.activeModel);
+      }
     } catch {
       setStatus(null);
     }
@@ -175,6 +188,24 @@ export default function VoiceSection() {
     <SettingsPage title={t("adversum.voice.title")} description={t("adversum.voice.description")}>
       {!platform.supportsGlobalShortcuts && (
         <SettingsWarning>{t("shortcuts.waylandUnavailable")}</SettingsWarning>
+      )}
+      {status.modelVolume && (
+        <SettingsWarning>
+          <span data-voice-volume>
+            {t("adversum.voice.problem.modelVolume", { volume: status.modelVolume })}
+          </span>{" "}
+          <button
+            type="button"
+            className={buttonClass("secondary", "sm")}
+            disabled={!!download}
+            onClick={() => {
+              setProblem(null);
+              void reloadModelInternally().catch(ignore);
+            }}
+          >
+            {t("adversum.voice.useInternal")}
+          </button>
+        </SettingsWarning>
       )}
       <SettingsList>
         <SettingsRow

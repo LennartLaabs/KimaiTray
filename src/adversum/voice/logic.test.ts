@@ -20,6 +20,7 @@ import {
   getVoiceStatus,
   learnAlias,
   openVoicePrivacySettings,
+  reloadModelInternally,
   requestVoicePermission,
   setVoiceVocabulary,
   startVoice,
@@ -314,6 +315,7 @@ describe("voiceApi", () => {
     await chooseVoiceModelDir();
     await requestVoicePermission();
     await openVoicePrivacySettings();
+    await reloadModelInternally();
     await startVoice();
     await finishVoice();
     await cancelVoice();
@@ -335,6 +337,7 @@ describe("voiceApi", () => {
       ["adversum_voice_choose_dir"],
       ["adversum_voice_request_permission"],
       ["adversum_voice_open_privacy"],
+      ["adversum_voice_use_internal"],
       ["adversum_voice_start"],
       ["adversum_voice_finish"],
       ["adversum_voice_cancel"],

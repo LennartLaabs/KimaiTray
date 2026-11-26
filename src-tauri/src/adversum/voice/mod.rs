@@ -179,6 +179,11 @@ pub struct VoiceStatus {
     download: Option<models::DownloadProgress>,
     /// Where the last recording is kept for diagnosis.
     debug_dir: String,
+    /// The model voice input uses right now: the chosen one, or another
+    /// installed one when the chosen one is missing.
+    active_model: Option<&'static str>,
+    /// The model folder lies on this volume, which is not mounted.
+    model_volume: Option<String>,
 }
 
 #[tauri::command]
@@ -205,6 +210,8 @@ pub fn adversum_voice_status(app: AppHandle) -> Result<VoiceStatus, String> {
         default_model_dir: models::default_dir(&app)?.to_string_lossy().into_owned(),
         download: models::active_download(),
         debug_dir,
+        active_model: models::usable(&dir, &settings).map(|model| model.id),
+        model_volume: models::missing_volume(&dir),
     })
 }
 
@@ -294,6 +301,23 @@ pub fn adversum_voice_delete_model(
     #[cfg(target_os = "macos")]
     transcribe::unload();
     models::delete(&app, &model)
+}
+
+/// Goes back to the folder on the internal disk and downloads the chosen
+/// model there: the way out when the models lie on a disk that is not
+/// plugged in. The overlay of voice input may ask for it as well as the
+/// settings page. Resolves when the download has ended.
+#[tauri::command]
+pub async fn adversum_voice_use_internal(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<(), String> {
+    if !["settings", super::quick::WINDOW_LABEL].contains(&window.label()) {
+        return Err("Window is not authorized for this voice command".into());
+    }
+    super::settings::store_value(&app, models::MODEL_DIR_KEY, Value::String(String::new()))?;
+    let settings = super::settings::read(&app);
+    models::download(app, models::selected(&settings).id.to_string()).await
 }
 
 /// Lets the user pick the folder for speech models. Returns `None` when the

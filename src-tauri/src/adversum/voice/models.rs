@@ -110,6 +110,44 @@ fn part_path(dir: &Path, model: &ModelSpec) -> PathBuf {
 
 /// A model counts as installed when its file has exactly the pinned size.
 /// The checksum is verified once, right after the download.
+/// Which model to use when the chosen one is not there: the best that is.
+const FALLBACK_ORDER: [&str; 3] = ["large-v3-turbo", "small", "base"];
+
+/// The model to transcribe with: the chosen one, or, when its file is not
+/// there (deleted, or never downloaded while another was), the best one that
+/// is. Having a model and refusing to use it helps nobody.
+pub(crate) fn usable(dir: &Path, settings: &Map<String, Value>) -> Option<&'static ModelSpec> {
+    let chosen = selected(settings);
+    if is_installed(dir, chosen) {
+        return Some(chosen);
+    }
+    FALLBACK_ORDER
+        .iter()
+        .filter_map(|id| spec(id))
+        .find(|model| is_installed(dir, model))
+}
+
+/// The name of the volume a model folder lies on, when that volume is not
+/// mounted: "Extern" for `/Volumes/Extern/Modelle` without the disk.
+pub(crate) fn missing_volume(dir: &Path) -> Option<String> {
+    use std::path::Component;
+    if dir.is_dir() {
+        return None;
+    }
+    let mut parts = dir.components();
+    match (parts.next(), parts.next(), parts.next()) {
+        (
+            Some(Component::RootDir),
+            Some(Component::Normal(volumes)),
+            Some(Component::Normal(name)),
+        ) if volumes == "Volumes" => {
+            let volume = Path::new("/Volumes").join(name);
+            (!volume.is_dir()).then(|| name.to_string_lossy().trim().to_string())
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn is_installed(dir: &Path, model: &ModelSpec) -> bool {
     std::fs::metadata(model_path(dir, model))
         .map(|metadata| metadata.is_file() && metadata.len() == model.size)
@@ -331,6 +369,54 @@ mod tests {
 
     fn settings(value: Value) -> Map<String, Value> {
         value.as_object().cloned().unwrap()
+    }
+
+    #[test]
+    fn a_missing_chosen_model_gives_way_to_the_best_installed_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let install = |id: &str| {
+            let model = spec(id).unwrap();
+            let file = std::fs::File::create(model_path(dir.path(), model)).unwrap();
+            // Sparse: the size is what counts as installed, not the content.
+            file.set_len(model.size).unwrap();
+        };
+        let small = settings(json!({}));
+        assert!(usable(dir.path(), &small).is_none());
+        install("base");
+        assert_eq!(usable(dir.path(), &small).unwrap().id, "base");
+        // What happened on 2026-11-26: Small deleted, Large downloaded,
+        // the setting still on Small.
+        install("large-v3-turbo");
+        assert_eq!(usable(dir.path(), &small).unwrap().id, "large-v3-turbo");
+        install("small");
+        assert_eq!(usable(dir.path(), &small).unwrap().id, "small");
+        let base = settings(json!({"voiceModel": "base"}));
+        assert_eq!(usable(dir.path(), &base).unwrap().id, "base");
+    }
+
+    #[test]
+    fn a_folder_on_an_unmounted_volume_is_told_apart_from_a_missing_folder() {
+        assert_eq!(
+            missing_volume(Path::new("/Volumes/Nicht Da /Modelle/whisper")),
+            Some("Nicht Da".to_string())
+        );
+        assert_eq!(
+            missing_volume(Path::new("/Volumes/NichtDa")),
+            Some("NichtDa".to_string())
+        );
+        // An existing folder, a missing folder on the internal disk, and a
+        // missing folder on a mounted volume are not this problem.
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(missing_volume(dir.path()), None);
+        assert_eq!(missing_volume(&dir.path().join("fehlt")), None);
+        assert_eq!(missing_volume(Path::new("/Volumes")), None);
+        if let Some(mounted) = std::fs::read_dir("/Volumes")
+            .ok()
+            .and_then(|mut volumes| volumes.next())
+            .and_then(Result::ok)
+        {
+            assert_eq!(missing_volume(&mounted.path().join("gibt-es-nicht")), None);
+        }
     }
 
     #[test]

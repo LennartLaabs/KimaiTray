@@ -27,6 +27,7 @@ CI=true ./scripts/adversum/env.sh \
 APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/KimaiTray Adversum.app"
 adversum_add_keyhelper "$APP"
 adversum_check_signature "$APP"
+adversum_hide_build_copies
 
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"

@@ -27,7 +27,9 @@ Build a disk image only when Lennart asks for one for someone else (Patrick): `.
 
 ### Only the installed app runs
 
-**Never start the app from the build folder or with `npm run tauri dev` while Lennart uses the installed one**, and never leave such an instance running. If a native check needs a dev instance, tell him first, use `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, and quit it when done. `install.sh` quits every copy and warns if one outside `/Applications` is still running. Debug builds use the keychain service `io.adversum.kimaitray.dev`, so they cannot touch the real API token.
+**Never start the app from the build folder or with `npm run tauri dev` while Lennart uses the installed one**, and never leave such an instance running. If a native check needs a dev instance, tell him first, use `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, and quit it when done. `install.sh` quits every copy and warns if one outside `/Applications` is still running.
+
+This has gone wrong twice on 2026-11-26: the universal bundle left in `src-tauri/target/universal-apple-darwin/…` by a compile check was started (it has the app's name, so Spotlight offers it) and ran code from before the speech fixes on the real data. Lennart's failed microphone test and the "speech model is missing" report both came from that copy; its log line is `Adversum build dev`. Three things now stand against it: a release build started outside `/Applications` opens the installed app and ends (`adversum::defer_to_installed_copy`; `ADVERSUM_ALLOW_ANYWHERE=1` overrides it for a deliberate run), `install.sh` and `build-dmg.sh` take the bundles in `target` out of Spotlight and Launch Services (`adversum_hide_build_copies`), and bundles built before the guard existed should be removed once Lennart agrees. When a report does not fit the installed code, check `ps` and the build line in the log first. Debug builds use the keychain service `io.adversum.kimaitray.dev`, so they cannot touch the real API token.
 
 ## Language models for several entries
 
