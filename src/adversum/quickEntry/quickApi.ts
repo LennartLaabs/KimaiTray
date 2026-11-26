@@ -59,6 +59,7 @@ export async function fetchHistory(client: KimaiClient, now: Date): Promise<Hist
         projectId: extractId(entry.project),
         activityId: extractId(entry.activity),
         begin: parseKimaiDate(entry.begin),
+        description: entry.description,
       });
     }
     if (batch.length < HISTORY_PAGE_SIZE) break;

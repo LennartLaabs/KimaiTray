@@ -156,7 +156,15 @@ describe("QuickEntryBar", () => {
     expect(input().value).toBe("DUSW Unternehmensgruppe Marketing Retainer Projektmanagement ");
     expect(
       completionText(
-        { combination: catalog.combinations[0]!, note: "", score: 0, textScore: 0, matchedWords: 0, namesTarget: false },
+        {
+          combination: catalog.combinations[0]!,
+          note: "",
+          score: 0,
+          textScore: 0,
+          matchedWords: 0,
+          namesTarget: false,
+          words: { customer: [], project: [], activity: [] },
+        },
         "",
       ),
     ).toBe("DUSW Unternehmensgruppe Marketing Retainer Projektmanagement ");

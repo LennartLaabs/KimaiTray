@@ -37,6 +37,32 @@ describe("buildHistory", () => {
     expect(history.stats.get("21-2")?.count).toBe(1);
     expect(buildHistory([], now)).toEqual(EMPTY_HISTORY);
   });
+
+  it("remembers which words of past notes went with which combination", () => {
+    const history = buildHistory(
+      [
+        { projectId: 11, activityId: 2, begin: daysAgo(1), description: "Gigi Call" },
+        { projectId: 11, activityId: 2, begin: daysAgo(2), description: "Call mit Gigi, Gigi krank" },
+        { projectId: 21, activityId: 6, begin: daysAgo(3), description: "Call zu Q3" },
+        { projectId: 21, activityId: 6, begin: daysAgo(4), description: null },
+        { projectId: 21, activityId: 6, begin: daysAgo(HISTORY_DAYS + 5), description: "Uralt" },
+      ],
+      now,
+    );
+    // Once per entry, however often the word occurs in its note.
+    expect(history.notes.get("gigi")).toEqual(new Map([["11-2", 2]]));
+    expect(history.notes.get("call")).toEqual(
+      new Map([
+        ["11-2", 2],
+        ["21-6", 1],
+      ]),
+    );
+    expect(history.notes.get("mit")).toEqual(new Map([["11-2", 1]]));
+    // Too short to say anything, or too old.
+    expect(history.notes.has("q3")).toBe(false);
+    expect(history.notes.has("zu")).toBe(false);
+    expect(history.notes.has("uralt")).toBe(false);
+  });
 });
 
 describe("historyScore", () => {

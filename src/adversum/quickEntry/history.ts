@@ -1,10 +1,13 @@
 import { combinationKey } from "./catalog";
+import { normalizeWords } from "./normalize";
 
 /** One past time entry, reduced to what the ranking needs. */
 export interface HistoryEntry {
   projectId: number;
   activityId: number;
   begin: Date;
+  /** The entry's note; only used to learn which words go with which task. */
+  description?: string | null;
 }
 
 interface CombinationStats {
@@ -21,6 +24,12 @@ export interface QuickHistory {
   stats: ReadonlyMap<string, CombinationStats>;
   /** Highest entry count of any combination; 0 without history. */
   maxCount: number;
+  /**
+   * For each word of past notes, how many entries of each combination had it:
+   * "gigi" → { "12-3": 5 }. Spoken input uses it to find the task from a name
+   * that only ever appears in notes.
+   */
+  notes: ReadonlyMap<string, ReadonlyMap<string, number>>;
 }
 
 export const HISTORY_DAYS = 90;
@@ -30,12 +39,16 @@ const FREQUENCY_WEIGHT = 0.5;
 const RECENCY_WEIGHT = 0.3;
 const PATTERN_WEIGHT = 0.2;
 
-export const EMPTY_HISTORY: QuickHistory = { stats: new Map(), maxCount: 0 };
+/** Shorter words of a note say nothing about the task. */
+const MIN_NOTE_WORD_LENGTH = 3;
+
+export const EMPTY_HISTORY: QuickHistory = { stats: new Map(), maxCount: 0, notes: new Map() };
 
 /** Counts the entries of the last `HISTORY_DAYS` days per combination. */
 export function buildHistory(entries: readonly HistoryEntry[], now: Date): QuickHistory {
   const earliest = now.getTime() - HISTORY_DAYS * DAY_MS;
   const stats = new Map<string, CombinationStats>();
+  const notes = new Map<string, Map<string, number>>();
   let maxCount = 0;
   for (const entry of entries) {
     const begin = entry.begin.getTime();
@@ -51,8 +64,17 @@ export function buildHistory(entries: readonly HistoryEntry[], now: Date): Quick
     item.hours[entry.begin.getHours()]! += 1;
     item.weekdays[entry.begin.getDay()]! += 1;
     maxCount = Math.max(maxCount, item.count);
+    for (const word of new Set(normalizeWords(entry.description ?? ""))) {
+      if (word.length < MIN_NOTE_WORD_LENGTH) continue;
+      let byCombination = notes.get(word);
+      if (!byCombination) {
+        byCombination = new Map();
+        notes.set(word, byCombination);
+      }
+      byCombination.set(key, (byCombination.get(key) ?? 0) + 1);
+    }
   }
-  return { stats, maxCount };
+  return { stats, maxCount, notes };
 }
 
 /**

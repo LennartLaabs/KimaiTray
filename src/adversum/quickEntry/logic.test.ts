@@ -46,6 +46,7 @@ const suggestion: QuickSuggestion = {
   textScore: 2,
   matchedWords: 2,
   namesTarget: true,
+  words: { customer: ["dusw"], project: [], activity: ["pm"] },
 };
 
 function timesheet(id: number, overrides: Record<string, unknown> = {}) {
@@ -197,15 +198,19 @@ describe("fetchHistory", () => {
     const fullPage = Array.from({ length: 500 }, (_, index) => timesheet(index + 1));
     mocks.getTimesheets
       .mockResolvedValueOnce(fullPage)
-      .mockResolvedValueOnce([timesheet(501, { project: { id: 21 }, activity: 7 })]);
+      .mockResolvedValueOnce([
+        timesheet(501, { project: { id: 21 }, activity: 7, description: "Gigi Call" }),
+      ]);
     const entries = await fetchHistory(client, now);
     expect(entries).toHaveLength(501);
     expect(entries[0]).toEqual({
       projectId: 11,
       activityId: 1,
       begin: new Date("2026-11-25T09:00:00+01:00"),
+      description: "",
     });
-    expect(entries[500]).toMatchObject({ projectId: 21, activityId: 7 });
+    // The note comes along: spoken input finds tasks through names in notes.
+    expect(entries[500]).toMatchObject({ projectId: 21, activityId: 7, description: "Gigi Call" });
     expect(mocks.getTimesheets).toHaveBeenNthCalledWith(1, client, {
       begin: "2026-08-28T00:00:00",
       size: 500,
