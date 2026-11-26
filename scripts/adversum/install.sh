@@ -10,6 +10,11 @@
 # live in ~/Library/Application Support/io.adversum.kimaitray and in the
 # keychain, not in the app bundle.
 #
+# The build is signed with the certificate "Adversum Dev" (signing.sh), so
+# macOS recognizes every build as the same app and does not ask for the
+# keychain again. Only the copy in /Applications is ever started: a second
+# copy from the build folder would be a different app to the keychain.
+#
 # For a disk image to hand to someone else, use build-dmg.sh instead.
 set -eu
 
@@ -25,13 +30,16 @@ case "$(uname -m)" in
 esac
 BUILT="src-tauri/target/${TARGET}/release/bundle/macos/${APP_NAME}.app"
 
+. ./scripts/adversum/signing.sh
+
 if [ "${1:-}" != "--no-build" ]; then
-  echo "==> Building ${APP_NAME} (${TARGET})"
-  # CI=true keeps the bundler from scripting Finder; "-" signs ad hoc.
-  CI=true APPLE_SIGNING_IDENTITY="-" ./scripts/adversum/env.sh \
+  echo "==> Building ${APP_NAME} (${TARGET}), signing with \"${APPLE_SIGNING_IDENTITY}\""
+  # CI=true keeps the bundler from scripting Finder.
+  CI=true ./scripts/adversum/env.sh \
     npm run tauri build -- --target "$TARGET" --bundles app
 fi
 [ -d "$BUILT" ] || { echo "No build found at $BUILT" >&2; exit 1; }
+adversum_check_signature "$BUILT"
 
 echo "==> Quitting the running app"
 # Matches the installed app and a copy started from a build folder alike.
@@ -59,6 +67,11 @@ mv "$STAGED" "$INSTALLED"
 echo "==> Starting ${APP_NAME}"
 open "$INSTALLED"
 sleep 2
+others="$(pgrep -fl "$PATTERN" | grep -v " /Applications/${PATTERN}" || true)"
+if [ -n "$others" ]; then
+  echo "WARNING: another copy of the app is running outside /Applications:" >&2
+  echo "$others" >&2
+fi
 if pgrep -f "/Applications/${PATTERN}" >/dev/null 2>&1; then
   version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INSTALLED/Contents/Info.plist")"
   echo "==> Installed and running: ${APP_NAME} ${version} ($(git rev-parse --short HEAD))"

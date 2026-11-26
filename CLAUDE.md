@@ -21,9 +21,25 @@ Lennart tests in the installed app, so a fix is not done until it runs there. Af
 
 1. `npm run check` and the three cargo commands are green.
 2. Commit and push to `origin main`.
-3. `./scripts/adversum/install.sh`: release build for this Mac, quit the running "KimaiTray Adversum", replace `/Applications/KimaiTray Adversum.app`, start it again. Settings, favorites and the API token survive; they are not in the app bundle.
+3. `./scripts/adversum/install.sh`: release build for this Mac, signed with "Adversum Dev", quit the running "KimaiTray Adversum", replace `/Applications/KimaiTray Adversum.app`, start it again. Settings, favorites and the API token survive; they are not in the app bundle.
 
 Build a disk image only when Lennart asks for one for someone else (Patrick): `./scripts/adversum/build-dmg.sh` (universal, Apple Silicon and Intel).
+
+### Only the installed app runs
+
+**Never start the app from the build folder or with `npm run tauri dev` while Lennart uses the installed one**, and never leave such an instance running. If a native check needs a dev instance, tell him first, use `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, and quit it when done. `install.sh` quits every copy and warns if one outside `/Applications` is still running. Debug builds use the keychain service `io.adversum.kimaitray.dev`, so they cannot touch the real API token.
+
+## Code signing
+
+macOS ties "Always Allow" for a keychain entry, and privacy permissions such as the microphone, to the app's *designated requirement*. An ad-hoc signature has a new one with every build, so macOS asked for the keychain after every install. Release builds are therefore signed with a local self-signed certificate:
+
+- Certificate **"Adversum Dev"** (code signing only, valid until November 2036), private key in Lennart's login keychain, trusted for code signing for his user. Created by `./scripts/adversum/setup-signing.sh`; run it again on a new Mac or after the certificate expired.
+- `scripts/adversum/signing.sh` (sourced by `install.sh` and `build-dmg.sh`) sets `APPLE_SIGNING_IDENTITY` to it and prints signer and designated requirement after each build. The requirement must read `identifier "io.adversum.kimaitray" and certificate leaf = H"…"` with the same hash every time. Without the certificate the scripts fall back to ad hoc and say so.
+- Dialogs only a human can answer, each once: the trust change in `setup-signing.sh` (password or Touch ID); "codesign wants to sign using key Adversum Dev" at the first build (password, **Always Allow**); the keychain question for `io.adversum.kimaitray` at the first start of the first signed build (password, **Always Allow**). Tell Lennart before any step that brings one up. After that, installs are silent.
+- A new certificate (expired, deleted, other Mac) is a new requirement: the keychain asks once more, and macOS forgets the microphone permission.
+- Do not read keychain access lists with `security dump-keychain -a`: it opens a dialog for every entry. `security find-generic-password -s io.adversum.kimaitray` (without `-w`/`-g`) shows the entry's attributes silently. Never read the token itself.
+
+**For Patrick (any other Mac):** the certificate is self-signed and only trusted on Lennart's Mac. A disk image from `build-dmg.sh` is not notarized, so Gatekeeper blocks the first start; Patrick has to allow it under System Settings → Privacy & Security → "Open Anyway" ("Dennoch öffnen") after each new image. That stays so until we sign and notarize with an Apple Developer ID. The stable signature still spares him the repeated keychain question between our images.
 
 ## Environment on Lennart's Mac
 
@@ -60,6 +76,7 @@ All through `./scripts/adversum/env.sh …` (or after sourcing it):
 | Copy new `adversum.*` keys from `en` to sk/cs/uk/es (`--overwrite` after rewording an existing English text) | `node scripts/adversum/i18n-sync.mjs` |
 | Rust format / lint / tests (in `src-tauri/`) | `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` |
 | Build and install on this Mac | `./scripts/adversum/install.sh` (`--no-build` reuses the last build) |
+| One-time: create and trust the signing certificate | `./scripts/adversum/setup-signing.sh` |
 | Universal disk image for someone else | `./scripts/adversum/build-dmg.sh` |
 
 Build output: `src-tauri/target/<target>/release/bundle/macos/` (app) and `…/bundle/dmg/` (disk image).
@@ -89,7 +106,7 @@ git fetch upstream
 git merge upstream/main
 ```
 
-Conflicts should only appear at `ADVERSUM:` hooks, in `tauri.conf.json` (identifier, product name, updater block) and in the locale files (our keys sit in the top-level `adversum` object at the end of each file). After merging: `npm ci`, `npm run check`, the three cargo commands, then a short `npm run tauri dev` smoke test.
+Conflicts should only appear at `ADVERSUM:` hooks, in `tauri.conf.json` (identifier, product name, updater block) and in the locale files (our keys sit in the top-level `adversum` object at the end of each file). After merging: `npm ci`, `npm run check`, the three cargo commands, then `./scripts/adversum/install.sh` as the smoke test (not `npm run tauri dev`, see "Only the installed app runs").
 
 ## Architecture
 

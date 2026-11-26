@@ -4,15 +4,23 @@
 #
 #   ./scripts/adversum/build-dmg.sh
 #
-# The image is ad-hoc signed and not notarized. On another Mac, Gatekeeper
-# blocks the first start: System Settings → Privacy & Security → "Open Anyway".
+# The image is signed with the self-signed certificate "Adversum Dev"
+# (signing.sh) and not notarized. That certificate means nothing on another
+# Mac: Gatekeeper blocks the first start there (System Settings → Privacy &
+# Security → "Open Anyway") until we sign with an Apple Developer ID. The
+# stable signature still helps the other Mac: its keychain keeps "Always
+# Allow" from one of our images to the next.
 set -eu
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
-CI=true APPLE_SIGNING_IDENTITY="-" ./scripts/adversum/env.sh \
+. ./scripts/adversum/signing.sh
+
+CI=true ./scripts/adversum/env.sh \
   npm run tauri build -- --target universal-apple-darwin
+adversum_check_signature \
+  "src-tauri/target/universal-apple-darwin/release/bundle/macos/KimaiTray Adversum.app"
 
 DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
 for image in "$DMG_DIR"/*.dmg; do

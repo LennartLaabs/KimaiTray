@@ -11,8 +11,14 @@ use crate::{legacy_settings_path, scrub_legacy_store_key};
 const STORE_PATH: &str = "settings.json";
 const TOKEN_PREFIX: &str = "api-token:";
 // ADVERSUM: own keychain service so the fork never reads or overwrites the
-// credentials of an upstream KimaiTray install.
-const KEYRING_SERVICE: &str = "io.adversum.kimaitray";
+// credentials of an upstream KimaiTray install. Debug builds use a service of
+// their own: they are not signed with the release certificate, so touching
+// the real entry would make macOS ask for keychain access every time.
+const KEYRING_SERVICE: &str = if cfg!(debug_assertions) {
+    "io.adversum.kimaitray.dev"
+} else {
+    "io.adversum.kimaitray"
+};
 const MAX_CREDENTIAL_KEY_BYTES: usize = 4 * 1024;
 const MAX_TOKEN_BYTES: usize = 64 * 1024;
 static LEGACY_CREDENTIAL_SCRUB: Mutex<()> = Mutex::new(());
