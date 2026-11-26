@@ -44,6 +44,8 @@ export interface StartPreview {
   customerColor: string;
   description?: string;
   tags?: string[];
+  // ADVERSUM: lets the pending card show the customer logo.
+  projectId?: number;
 }
 
 export function useStartTask(

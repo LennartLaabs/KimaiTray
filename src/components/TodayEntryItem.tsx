@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { TodayEntry, ColorMode } from "../types";
 import TagsList from "./TagsList";
 import ColorDots from "./ColorDots";
+import { useTaskLabel } from "../adversum/display/taskLabel";
 import { formatTime, formatDuration, parseKimaiDate } from "../utils/time";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { separator, showContextMenu, type ContextMenuEntry } from "./contextMenu";
@@ -33,9 +34,9 @@ export default function TodayEntryItem({
     ? Math.max(0, Math.floor((Date.now() - parseKimaiDate(entry.beginIso).getTime()) / 1000))
     : (entry.duration ?? 0);
 
-  const subtitle = [entry.customer, entry.description]
-    .filter(Boolean)
-    .join(" · ");
+  // ADVERSUM: customer-first labels (line 1 customer, line 2 project · activity · note).
+  const label = useTaskLabel(entry);
+  const subtitle = label.subtitle;
 
   const timeRange = (
     <span className="flex flex-col items-start whitespace-nowrap leading-tight">
@@ -132,16 +133,17 @@ export default function TodayEntryItem({
           colorMode={colorMode}
           size="sm"
           pulse={entry.isRunning}
+          projectId={entry.projectId} // ADVERSUM: customer logo
         />
 
         {/* Project + Activity */}
         <div className="min-w-0">
           <div className="flex items-baseline gap-1">
-            <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">
-              {entry.project}
+            <span className={`text-[11px] ${label.titleWeight} text-gray-700 dark:text-gray-300 truncate`}>
+              {label.title}
             </span>
             <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate shrink-0">
-              {entry.activity}
+              {label.aside}
             </span>
           </div>
         </div>

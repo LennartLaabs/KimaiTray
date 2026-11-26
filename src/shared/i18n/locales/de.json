@@ -778,5 +778,38 @@
     "retry": "Erneut versuchen…",
     "retryWarning": "Nur wiederholen, wenn diese Zeit im Issue fehlt. Ein erneuter Eintrag zählt die Zeit doppelt.",
     "confirmRetry": "Zeit fehlt — erneut versuchen"
+  },
+  "adversum": {
+    "settingsGroup": "Adversum",
+    "logos": {
+      "title": "Kundenlogos",
+      "description": "Zeigt statt der Farbpunkte ein rundes Kundenlogo. Logos werden einmal geladen, auf diesem Mac gespeichert und alle 30 Tage aktualisiert.",
+      "display": "Darstellung",
+      "indicator": "Kunden-Indikator",
+      "indicatorDescription": "Logo zeigt das Kundenlogo mit der Aktivitätsfarbe als kleinem Punkt. Farbpunkte behält die ursprüngliche Darstellung.",
+      "indicatorLogo": "Logo",
+      "indicatorDots": "Farbpunkte",
+      "logoDevKey": "logo.dev Publishable Key",
+      "logoDevKeyDescription": "Optional. Mit Key werden Logos über die Domain der Kunden-Homepage bei logo.dev gesucht, bevor das Icon der Homepage verwendet wird.",
+      "customers": "Kunden",
+      "dropHint": "Bild auf einen Kunden ziehen oder eine Datei wählen, um das Logo von Hand zu setzen.",
+      "noConnection": "Mit Kimai verbinden, um Kundenlogos zu verwalten.",
+      "empty": "Diese Kimai-Verbindung hat keine sichtbaren Kunden.",
+      "reloadAll": "Alle Logos neu laden",
+      "reloadAllDescription": "Lädt jedes Logo neu, das nicht von Hand gesetzt wurde.",
+      "choose": "Bild wählen",
+      "chooseFor": "Logo-Bild für {{customer}} wählen",
+      "reload": "Neu laden",
+      "reset": "Zurücksetzen",
+      "failed": "Dieses Bild oder Logo konnte nicht geladen werden.",
+      "tooLarge": "Das Bild ist größer als 5 MB.",
+      "source": {
+        "manual": "Von Hand gesetzt",
+        "logodev": "Von logo.dev",
+        "homepage": "Von der Homepage",
+        "none": "Kein Logo gefunden, Initialen werden gezeigt",
+        "pending": "Noch nicht geladen"
+      }
+    }
   }
 }

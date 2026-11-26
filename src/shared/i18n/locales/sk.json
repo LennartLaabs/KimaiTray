@@ -778,5 +778,38 @@
     "retry": "Zopakovať…",
     "retryWarning": "Zopakujte iba vtedy, ak tento čas v issue chýba. Opakovanie existujúceho zápisu započíta čas dvakrát.",
     "confirmRetry": "Čas chýba — zopakovať"
+  },
+  "adversum": {
+    "settingsGroup": "Adversum",
+    "logos": {
+      "title": "Customer logos",
+      "description": "Show a round customer logo instead of color dots. Logos are loaded once, stored on this Mac and refreshed every 30 days.",
+      "display": "Display",
+      "indicator": "Customer indicator",
+      "indicatorDescription": "Logo shows the customer logo with the activity color as a small dot. Color dots keeps the original look.",
+      "indicatorLogo": "Logo",
+      "indicatorDots": "Color dots",
+      "logoDevKey": "logo.dev publishable key",
+      "logoDevKeyDescription": "Optional. With a key, logos are looked up at logo.dev by the customer's homepage domain before the homepage icon is used.",
+      "customers": "Customers",
+      "dropHint": "Drop an image on a customer or choose a file to set its logo by hand.",
+      "noConnection": "Connect to Kimai to manage customer logos.",
+      "empty": "This Kimai connection has no visible customers.",
+      "reloadAll": "Reload all logos",
+      "reloadAllDescription": "Fetches every logo again that was not set by hand.",
+      "choose": "Choose image",
+      "chooseFor": "Choose a logo image for {{customer}}",
+      "reload": "Reload",
+      "reset": "Reset",
+      "failed": "This image or logo could not be loaded.",
+      "tooLarge": "The image is larger than 5 MB.",
+      "source": {
+        "manual": "Set by hand",
+        "logodev": "From logo.dev",
+        "homepage": "From the homepage",
+        "none": "No logo found, showing initials",
+        "pending": "Not loaded yet"
+      }
+    }
   }
 }

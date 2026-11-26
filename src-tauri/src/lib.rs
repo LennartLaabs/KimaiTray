@@ -1,3 +1,5 @@
+// ADVERSUM: fork additions live in their own module tree.
+mod adversum;
 mod http;
 mod idle;
 mod idle_stats;
@@ -232,6 +234,13 @@ pub fn run() {
             store::claim_legacy_favorites_store,
             store::move_favorites_store,
             store::migrate_legacy_store,
+            // ADVERSUM: fork commands.
+            adversum::settings::adversum_get_settings,
+            adversum::settings::adversum_patch_settings,
+            adversum::logos::adversum_logo_list,
+            adversum::logos::adversum_logo_fetch,
+            adversum::logos::adversum_logo_set_manual,
+            adversum::logos::adversum_logo_clear_manual,
         ])
         .setup(|app| {
             info!(

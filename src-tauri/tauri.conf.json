@@ -34,6 +34,7 @@
         "label": "settings",
         "title": "KimaiTray — Settings",
         "url": "/",
+        "dragDropEnabled": false,
         "width": 880,
         "height": 640,
         "minWidth": 640,

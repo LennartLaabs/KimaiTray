@@ -85,7 +85,9 @@ Conflicts should only appear at `ADVERSUM:` hooks, in `tauri.conf.json` (identif
 
 ### Adversum additions
 
-Documented per feature in `src/adversum/README.md`. In short:
+Documented per feature in `src/adversum/README.md`, including every hook into upstream files. In short:
 
 - `src/adversum/updater.ts`: updater kill switch.
-- Further modules are added per feature (customer logos, quick entry, task switching); each one is listed in `src/adversum/README.md` together with its hooks into upstream files.
+- Fork settings: own store file `adversum.json` through `adversum_get_settings` / `adversum_patch_settings` (`src-tauri/src/adversum/settings.rs`), read in React with `useAdversumSettings()`.
+- `src/adversum/AdversumBridge.tsx` (mounted in `main.tsx` next to the window component) fills the module-level display store (`display/displayStore.ts`). Upstream components read it through hooks such as `useCustomerIndicator` and `useTaskLabel`. The store is empty in upstream's tests, so upstream tests run unchanged.
+- Customer logos: fetched, validated, converted and cached in `src-tauri/src/adversum/logos.rs`, shown by `src/adversum/logos/CustomerAvatar.tsx`, managed in the settings page `src/adversum/settings/CustomerLogosSection.tsx`.

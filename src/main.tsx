@@ -7,6 +7,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import QueryProvider from "./providers/QueryProvider";
 import GlobalContextMenuGuard from "./components/GlobalContextMenuGuard";
 import { getPlatformInfo } from "./platform";
+// ADVERSUM: feeds the fork's display store (customer logos) for this window.
+import AdversumBridge from "./adversum/AdversumBridge";
 import "./index.css";
 
 window.addEventListener("unhandledrejection", (event) => {
@@ -41,6 +43,10 @@ async function renderApp() {
       <ErrorBoundary>
         <QueryProvider>
           <GlobalContextMenuGuard />
+          {/* ADVERSUM: a sibling, not a wrapper, so WindowApp stays the last child. */}
+          {label !== "settings" && label !== "changelog" && (
+            <AdversumBridge windowLabel={label} />
+          )}
           <WindowApp />
         </QueryProvider>
       </ErrorBoundary>

@@ -89,6 +89,7 @@ export default function PausedTimerCard({
             projectColor={paused.projectColor}
             customerColor={paused.customerColor ?? ""}
             colorMode={colorMode}
+            projectId={paused.projectId} // ADVERSUM: customer logo
           />
           <div className="min-w-0 flex flex-1 items-center gap-2">
             <span className="min-w-0 max-w-[55%] shrink truncate text-[11px] font-medium leading-4 text-gray-800 dark:text-gray-200">
@@ -168,6 +169,8 @@ export default function PausedTimerCard({
             projectColor={paused.projectColor}
             customerColor={paused.customerColor ?? ""}
             colorMode={colorMode}
+            projectId={paused.projectId} // ADVERSUM: customer logo
+            variant="card"
           />
           <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
             {paused.project}

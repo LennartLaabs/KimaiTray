@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { RecentTask, ColorMode } from "../types";
 import TagsList from "./TagsList";
 import ColorDots from "./ColorDots";
+import { useTaskLabel } from "../adversum/display/taskLabel";
 import { separator, showContextMenu, type ContextMenuEntry } from "./contextMenu";
 
 interface RecentTaskItemProps {
@@ -38,9 +39,9 @@ export default function RecentTaskItem({
   const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
 
-  const subtitle = [task.customer, task.description]
-    .filter(Boolean)
-    .join(" · ");
+  // ADVERSUM: customer-first labels (line 1 customer, line 2 project · activity · note).
+  const label = useTaskLabel(task);
+  const subtitle = label.subtitle;
   /* v8 ignore start -- callbacks execute from a native OS context menu */
   const contextEntries: ContextMenuEntry[] = [
     { text: t("common.start"), enabled: !disabled, action: () => onStart(task) },
@@ -106,15 +107,16 @@ export default function RecentTaskItem({
           projectColor={task.projectColor}
           customerColor={task.customerColor}
           colorMode={colorMode}
+          projectId={task.projectId} // ADVERSUM: customer logo
         />
 
         <div className="flex-1 min-w-0 text-left">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
-              {task.project}
+            <span className={`text-xs ${label.titleWeight} text-gray-700 dark:text-gray-300 truncate`}>
+              {label.title}
             </span>
             <span className="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">
-              {task.activity}
+              {label.aside}
             </span>
           </div>
           {subtitle && (

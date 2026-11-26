@@ -221,4 +221,6 @@ export type SettingsSection =
   | "idle"
   | "shortcuts"
   | "test"
-  | "about";
+  | "about"
+  // ADVERSUM: fork settings pages.
+  | "adversumLogos";

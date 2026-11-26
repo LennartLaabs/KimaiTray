@@ -352,6 +352,7 @@ export default function ActiveTimerCard({
             customerColor={timer.customerColor}
             colorMode={colorMode}
             pulse
+            projectId={timer.projectId} // ADVERSUM: customer logo
           />
           {editingDesc ? (
             <input
@@ -427,6 +428,8 @@ export default function ActiveTimerCard({
             customerColor={timer.customerColor}
             colorMode={colorMode}
             pulse
+            projectId={timer.projectId} // ADVERSUM: customer logo
+            variant="card"
           />
           <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
             {timer.project}

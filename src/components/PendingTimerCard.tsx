@@ -96,6 +96,8 @@ export default function PendingTimerCard({
       projectColor={preview.projectColor}
       customerColor={preview.customerColor}
       colorMode={colorMode}
+      projectId={preview.projectId} // ADVERSUM: customer logo
+      variant={compact ? "list" : "card"}
     />
   );
   const retryStatus = retry && (

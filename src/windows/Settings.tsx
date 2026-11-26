@@ -23,6 +23,8 @@ import IntegrationsSection from "../settings/IntegrationsSection";
 import { SettingsSavedContext } from "../settings/SettingsLayout";
 import { currentPlatform } from "../platform";
 import type { AppSettings } from "../types";
+// ADVERSUM: fork settings pages.
+import { ADVERSUM_NAV, renderAdversumSection } from "../adversum/settings/navigation";
 
 /** Sidebar-navigable settings sections (excludes connection tabs). */
 type NavSection = Exclude<SettingsSection, "connection" | "features" | "integrations">;
@@ -68,6 +70,7 @@ const NAV_ICONS: Record<NavSection, ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
     </svg>
   ),
+  ...ADVERSUM_NAV.icons, // ADVERSUM
 };
 
 const NAV_LABEL_KEYS: Record<NavSection, string> = {
@@ -79,6 +82,7 @@ const NAV_LABEL_KEYS: Record<NavSection, string> = {
   shortcuts: "shortcuts.title",
   test: "testSection.title",
   about: "aboutSection.title",
+  ...ADVERSUM_NAV.labelKeys, // ADVERSUM
 };
 
 /** Settings sections grouped into logical categories for the sidebar. */
@@ -86,6 +90,7 @@ const NAV_GROUPS: { titleKey: string; items: NavSection[] }[] = [
   { titleKey: "settingsGroups.preferences", items: ["general"] },
   { titleKey: "settingsGroups.interface", items: ["appearance", "tray"] },
   { titleKey: "settingsGroups.automation", items: ["reminder", "idle", "shortcuts"] },
+  ADVERSUM_NAV.group, // ADVERSUM
   { titleKey: "settingsGroups.system", items: ["test", "about"] },
 ];
 
@@ -256,6 +261,9 @@ export default function Settings() {
         return <TestSection settings={settings} appVersion={appVersion} />;
       case "about":
         return <AboutSection />;
+      default:
+        // ADVERSUM: fork settings pages.
+        return renderAdversumSection(id);
     }
   };
 
