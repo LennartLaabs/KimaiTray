@@ -62,6 +62,16 @@ describe("buildHistory", () => {
     expect(history.notes.has("q3")).toBe(false);
     expect(history.notes.has("zu")).toBe(false);
     expect(history.notes.has("uralt")).toBe(false);
+    // Recurring capitalized words, most frequent first, then by alphabet.
+    expect(history.noteNames).toEqual(["Call", "Gigi"]);
+  });
+
+  it("keeps at most forty recurring names", () => {
+    const begin = daysAgo(1);
+    const entries = Array.from({ length: 45 }, (_, index) => `Name${index}`).flatMap(
+      (name) => [1, 2].map(() => ({ projectId: 1, activityId: 1, begin, description: name })),
+    );
+    expect(buildHistory(entries, now).noteNames).toHaveLength(40);
   });
 });
 

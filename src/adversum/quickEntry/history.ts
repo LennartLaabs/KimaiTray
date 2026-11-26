@@ -30,6 +30,11 @@ export interface QuickHistory {
    * that only ever appears in notes.
    */
   notes: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  /**
+   * Capitalized words that recur in past notes, most frequent first: mostly
+   * names ("Gigi"). They go into the speech model's vocabulary.
+   */
+  noteNames: readonly string[];
 }
 
 export const HISTORY_DAYS = 90;
@@ -42,13 +47,24 @@ const PATTERN_WEIGHT = 0.2;
 /** Shorter words of a note say nothing about the task. */
 const MIN_NOTE_WORD_LENGTH = 3;
 
-export const EMPTY_HISTORY: QuickHistory = { stats: new Map(), maxCount: 0, notes: new Map() };
+const NAME_WORD = /^\p{Lu}[\p{L}\p{N}&-]{2,}$/u;
+const NOTE_SEPARATORS = /[\s,.;:!?()"„“”]+/;
+const MIN_NAME_COUNT = 2;
+const MAX_NOTE_NAMES = 40;
+
+export const EMPTY_HISTORY: QuickHistory = {
+  stats: new Map(),
+  maxCount: 0,
+  notes: new Map(),
+  noteNames: [],
+};
 
 /** Counts the entries of the last `HISTORY_DAYS` days per combination. */
 export function buildHistory(entries: readonly HistoryEntry[], now: Date): QuickHistory {
   const earliest = now.getTime() - HISTORY_DAYS * DAY_MS;
   const stats = new Map<string, CombinationStats>();
   const notes = new Map<string, Map<string, number>>();
+  const names = new Map<string, number>();
   let maxCount = 0;
   for (const entry of entries) {
     const begin = entry.begin.getTime();
@@ -73,8 +89,16 @@ export function buildHistory(entries: readonly HistoryEntry[], now: Date): Quick
       }
       byCombination.set(key, (byCombination.get(key) ?? 0) + 1);
     }
+    for (const raw of new Set((entry.description ?? "").split(NOTE_SEPARATORS))) {
+      if (NAME_WORD.test(raw)) names.set(raw, (names.get(raw) ?? 0) + 1);
+    }
   }
-  return { stats, maxCount, notes };
+  const noteNames = [...names]
+    .filter(([, count]) => count >= MIN_NAME_COUNT)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, MAX_NOTE_NAMES)
+    .map(([name]) => name);
+  return { stats, maxCount, notes, noteNames };
 }
 
 /**

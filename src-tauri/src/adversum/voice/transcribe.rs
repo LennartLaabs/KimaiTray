@@ -111,6 +111,12 @@ fn schedule_unload() {
     });
 }
 
+/// Asked by whisper.cpp between computation steps; `true` ends the run.
+unsafe extern "C" fn abort_requested(user_data: *mut std::ffi::c_void) -> bool {
+    // SAFETY: `transcribe` passes a pointer to a live `AtomicBool`.
+    unsafe { &*user_data.cast::<AtomicBool>() }.load(Ordering::Relaxed)
+}
+
 /// Joins the segments Whisper returned into one line of text.
 pub(crate) fn join_segments<'a>(segments: impl IntoIterator<Item = &'a str>) -> String {
     segments
@@ -157,8 +163,16 @@ pub(crate) fn transcribe(
     if !vocabulary.is_empty() {
         params.set_initial_prompt(vocabulary);
     }
-    let abort_flag = abort.clone();
-    params.set_abort_callback_safe(move || abort_flag.load(Ordering::Relaxed));
+    // whisper-rs 0.16's `set_abort_callback_safe` hands whisper.cpp a pointer
+    // to a boxed trait object but reads it back as the closure itself, so the
+    // callback answers from unrelated memory and aborts runs at random
+    // (whisper error -6). Hence the plain callback with our own flag.
+    // SAFETY: The user data points to the flag inside `abort`, which this
+    // function keeps alive until `full` has returned.
+    unsafe {
+        params.set_abort_callback(Some(abort_requested));
+        params.set_abort_callback_user_data(Arc::as_ptr(&abort).cast_mut().cast());
+    }
 
     let outcome = engine.state.full(params, &padded);
     if abort.load(Ordering::Relaxed) {

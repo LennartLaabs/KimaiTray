@@ -142,11 +142,12 @@ Hold the voice key (default ⌃⌥V), say what you are working on, release. Ever
 
 ### Vocabulary
 
-The tray window keeps the native side's vocabulary current (`voice/vocabulary.ts`, `adversum_voice_set_vocabulary`): project, activity and customer names and all aliases. Whisper reads only the last part of an overlong prompt, so customers come last and the native side cuts from the front.
+The tray window keeps the native side's vocabulary current (`voice/vocabulary.ts`, `adversum_voice_set_vocabulary`): capitalized words that recur in past notes (mostly names such as "Gigi"), project, activity and customer names and all aliases. Whisper reads only the last part of an overlong prompt, so customers come last and the native side cuts from the front.
 
 ### Permissions and build
 
 - `src-tauri/Info.plist` has `NSMicrophoneUsageDescription`, and `src-tauri/Entitlements.plist` the audio-input entitlement the hardened runtime requires. macOS ties the permission to the signature, hence the fixed certificate (repository `CLAUDE.md`).
 - Building needs `cmake` (whisper.cpp is compiled from source by `whisper-rs-sys`) and the Xcode command line tools.
-- A real transcription can be tested without the app: see the ignored test in `voice/transcribe.rs`.
+- A real transcription can be tested without the app: see the ignored test in `voice/transcribe.rs` (speech from `say`, a downloaded model). Run it after any change to `transcribe.rs` or an update of whisper-rs; unit tests cannot catch what it catches.
+- Do not use whisper-rs 0.16's `set_abort_callback_safe`: it reads the callback's data with the wrong type and aborts runs at random (whisper error -6). `transcribe.rs` sets the plain callback itself.
 - The browser preview simulates recording and transcription (`scripts/adversum/preview/README.md`).

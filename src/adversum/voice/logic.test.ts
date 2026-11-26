@@ -72,6 +72,12 @@ describe("buildVocabulary", () => {
     );
   });
 
+  it("puts recurring names from past notes first, where they are cut first", () => {
+    expect(buildVocabulary(catalog, undefined, ["Gigi", "Patrick", "gigi"])).toMatch(
+      /^Notizen: Gigi, Patrick\. Projekte: /,
+    );
+  });
+
   it("leaves out empty groups and is empty without a catalog", () => {
     expect(buildVocabulary(catalog, undefined)).not.toContain("Kürzel");
     expect(buildVocabulary(buildCatalog([], [], []), aliases)).toBe("");

@@ -41,8 +41,8 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
   // vocabulary current: every name that can be started, and the aliases.
   const aliases = settings.aliases[options.connectionId];
   const vocabulary = useMemo(
-    () => (settings.voiceEnabled ? buildVocabulary(catalog, aliases) : ""),
-    [settings.voiceEnabled, catalog, aliases],
+    () => (settings.voiceEnabled ? buildVocabulary(catalog, aliases, history.noteNames) : ""),
+    [settings.voiceEnabled, catalog, aliases, history.noteNames],
   );
   useEffect(() => {
     if (vocabulary) void setVoiceVocabulary(vocabulary).catch(() => undefined);

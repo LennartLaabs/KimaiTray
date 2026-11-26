@@ -7,11 +7,13 @@ import type { ConnectionAliases } from "../settings/adversumSettings";
  * "SolarTech NRW" and "K&K" instead of something that merely sounds alike.
  *
  * Whisper only reads the last part of an overlong prompt, so the most
- * distinctive names come last: projects, activities, aliases, customers.
+ * distinctive names come last: names from past notes, projects, activities,
+ * aliases, customers.
  */
 export function buildVocabulary(
   catalog: QuickCatalog,
   aliases: ConnectionAliases | undefined,
+  noteNames: readonly string[] = [],
 ): string {
   const unique = (names: readonly string[]) => {
     const seen = new Set<string>();
@@ -30,6 +32,7 @@ export function buildVocabulary(
       )
     : [];
   const groups: [string, string[]][] = [
+    ["Notizen", unique(noteNames)],
     ["Projekte", unique(combinations.map((item) => item.project))],
     ["Tätigkeiten", unique(combinations.map((item) => item.activity))],
     ["Kürzel", unique(aliasWords)],

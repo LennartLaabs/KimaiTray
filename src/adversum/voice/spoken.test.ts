@@ -359,6 +359,49 @@ describe("thirty things people say", () => {
   });
 });
 
+describe("what the Small model really wrote for synthesized speech", () => {
+  it("is read like the sentences above", () => {
+    expect(entry("DUSW Projektmanagement, 3D-Call seit 10 Uhr.")).toMatchObject({
+      customer: "DUSW",
+      activity: "Projektmanagement",
+      note: "3d Call",
+      time: { kind: "start", begin: at(10) },
+    });
+    expect(entry("Ich habe von 10 bis 11 mit Gigi telefoniert.")).toMatchObject({
+      customer: "DUSW",
+      activity: "Austausch",
+      note: "Telefonat Gigi",
+      time: { kind: "range", begin: at(10), end: at(11) },
+    });
+    expect(entry("Ich mache jetzt SolarTech NRW Videoschnitt.")).toMatchObject({
+      customer: "SolarTech NRW",
+      activity: "Videoschnitt",
+      note: "",
+    });
+    expect(read("Stop.")).toEqual({ kind: "command", command: "stop" });
+    expect(read("Notiz, Angebot nachfassen.")).toEqual({
+      kind: "note",
+      text: "Angebot nachfassen",
+    });
+    // Both spellings came back for the same recording.
+    for (const sentence of ["K&K Design, seit Halb 3.", "K&K Design, seit halb drei."]) {
+      expect(entry(sentence)).toMatchObject({
+        customer: "K&K Global Solutions",
+        activity: "Design",
+        note: "",
+        // At 14:20, "halb drei" in the past is 2:30 at night.
+        time: { kind: "start", begin: at(2, 30) },
+      });
+    }
+    expect(entry("Vor 20 Minuten habe ich mit der DUSW Website angefangen.")).toMatchObject({
+      customer: "DUSW",
+      project: "Website Relaunch",
+      note: "",
+      time: { kind: "start", begin: at(14, 0) },
+    });
+  });
+});
+
 describe("readSpoken", () => {
   it("does not start by itself when nothing names a task", () => {
     const reading = read("Irgendwas mit Zetteln sortieren");
