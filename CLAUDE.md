@@ -15,6 +15,16 @@ Fork of [Engazan/KimaiTray](https://github.com/Engazan/KimaiTray) (Tauri 2, Reac
 6. Keep upstream conventions: i18n keys in all six locale files, Vitest tests next to the code, `npm run check` green before every commit.
 7. Fork-only settings are **not** added to `AppSettings`. The upstream settings patch is whitelisted through `contracts/ipc-contract.json`; fork settings have their own store (see Architecture).
 
+## After every fix: install it
+
+Lennart tests in the installed app, so a fix is not done until it runs there. After every fix or feature, in this order and without asking:
+
+1. `npm run check` and the three cargo commands are green.
+2. Commit and push to `origin main`.
+3. `./scripts/adversum/install.sh`: release build for this Mac, quit the running "KimaiTray Adversum", replace `/Applications/KimaiTray Adversum.app`, start it again. Settings, favorites and the API token survive; they are not in the app bundle.
+
+Build a disk image only when Lennart asks for one for someone else (Patrick): `./scripts/adversum/build-dmg.sh` (universal, Apple Silicon and Intel).
+
 ## Environment on Lennart's Mac
 
 The repo lives in an APFS disk image, because the SSD itself is exFAT (no symlinks, so `npm install` fails there).
@@ -49,9 +59,10 @@ All through `./scripts/adversum/env.sh …` (or after sourcing it):
 | i18n key parity | `npm run i18n:check` |
 | Copy new `adversum.*` keys from `en` to sk/cs/uk/es (`--overwrite` after rewording an existing English text) | `node scripts/adversum/i18n-sync.mjs` |
 | Rust format / lint / tests (in `src-tauri/`) | `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` |
-| Release build (.app and .dmg) | `npm run tauri build` |
+| Build and install on this Mac | `./scripts/adversum/install.sh` (`--no-build` reuses the last build) |
+| Universal disk image for someone else | `./scripts/adversum/build-dmg.sh` |
 
-Build output: `src-tauri/target/release/bundle/dmg/` and `…/bundle/macos/`.
+Build output: `src-tauri/target/<target>/release/bundle/macos/` (app) and `…/bundle/dmg/` (disk image).
 
 ### Browser preview (look at the UI without the native app)
 
