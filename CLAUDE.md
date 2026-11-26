@@ -23,18 +23,18 @@ The repo lives in an APFS disk image, because the SSD itself is exFAT (no symlin
 - Auto-mount: LaunchAgent `~/Library/LaunchAgents/io.adversum.mount-dev.plist` runs `~/Library/Application Support/Adversum/mount-dev-image.sh` at login and whenever a volume is mounted. Log: `~/Library/Logs/adversum-mount-dev.log`. Manual mount: double-click `Dev.sparsebundle` in Finder.
 - `node_modules`, `src-tauri/target`, the cargo registry and the npm cache are all inside the image. Only the Rust toolchain (`~/.rustup`, about 560 MB) is on the internal disk.
 
-### Node 24 for this project
+### Node and the project environment
 
-The system default Node is a different major version and does not satisfy `engines`. Node 24 LTS is installed keg-only through Homebrew (`/opt/homebrew/opt/node@24`), so it is not on `PATH` by default.
+Node is the system default from Homebrew (`node`, currently 26). `package.json` `engines` allows `^22.22.2 || ^24.15.0 || >=26.0.0`; Node 25 is not supported. `.node-version` (22) is upstream's file for CI and is left untouched.
 
-**Always run npm, node and cargo through `scripts/adversum/env.sh`.** It prepends Node 24 and `~/.cargo/bin` to `PATH` and, when the image is mounted, points `CARGO_HOME` and the npm cache into `/Volumes/AdversumDev/.cache`.
+**Always run npm, node and cargo through `scripts/adversum/env.sh`.** It adds `~/.cargo/bin` to `PATH` and, when the image is mounted, points `CARGO_HOME` and the npm cache into `/Volumes/AdversumDev/.cache`.
 
 ```sh
 ./scripts/adversum/env.sh npm run tauri dev     # run one command
 . ./scripts/adversum/env.sh                     # or source it once per shell
 ```
 
-`.node-version` (22) is upstream's file for CI and is left untouched.
+Node 25 and newer ship a global `sessionStorage`. Upstream's tests assume there is none outside jsdom (true up to Node 24), which leaves one branch of `src/api/deepLink.ts` uncovered and fails the coverage gate. `src/adversum/upstreamCompat.test.ts` covers that branch explicitly. If a merge from upstream fails `npm run check` only on newer Node, look for the same kind of assumption first and add a test there rather than editing upstream's tests.
 
 ## Commands
 

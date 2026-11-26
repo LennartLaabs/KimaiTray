@@ -6,19 +6,13 @@
 #   . ./scripts/adversum/env.sh                     # or source it into a shell
 #
 # What it does:
-# - Puts Homebrew's keg-only Node 24 first on PATH (the system default Node
-#   stays untouched) and adds ~/.cargo/bin for rustup's cargo/rustc.
+# - Adds ~/.cargo/bin to PATH for rustup's cargo and rustc. Node is the
+#   system default (Homebrew `node`); package.json `engines` says which
+#   versions are supported.
 # - When the APFS dev image is mounted at /Volumes/AdversumDev, keeps the
 #   cargo registry and the npm cache inside the image so the internal disk
 #   only holds the Rust toolchain (~/.rustup).
 
-ADVERSUM_NODE_FORMULA="node@24"
-for prefix in /opt/homebrew/opt /usr/local/opt; do
-  if [ -x "${prefix}/${ADVERSUM_NODE_FORMULA}/bin/node" ]; then
-    PATH="${prefix}/${ADVERSUM_NODE_FORMULA}/bin:${PATH}"
-    break
-  fi
-done
 if [ -d "${HOME}/.cargo/bin" ]; then
   PATH="${HOME}/.cargo/bin:${PATH}"
 fi
