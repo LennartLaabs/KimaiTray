@@ -4,10 +4,11 @@ import { emitTo } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useKimaiClient } from "../../hooks/useKimaiClient";
 import { useLanguageSync } from "../../hooks/useLanguageSync";
+import { currentPlatform } from "../../platform";
 import { logger } from "../../utils/logger";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
 import type { QuickAction } from "./actions";
-import { hideQuickWindow, releaseQuickWindowFocus, resizeQuickWindow } from "./quickApi";
+import { hideQuickWindow, resizeQuickWindow, showQuickToast } from "./quickApi";
 import QuickEntryBar from "./QuickEntryBar";
 import {
   QUICK_EXECUTE_EVENT,
@@ -22,13 +23,12 @@ import QuickToast from "./QuickToast";
 import { useQuickEntryData } from "./useQuickEntryData";
 import { useQuickTheme } from "./useQuickTheme";
 
-/** How long the bar waits for the tray window's confirmation. */
-const CONFIRMATION_WAIT_MS = 6000;
-
 type Stage =
+  /** Nothing on screen. */
+  | { name: "idle" }
+  /** The bar is open and has the keyboard. */
   | { name: "input" }
-  /** An action was sent to the tray window; its confirmation is pending. */
-  | { name: "sent" }
+  /** The confirmation of the last quick action, at the bottom of the screen. */
   | { name: "toast"; toast: QuickToastData };
 
 function report(error: unknown): void {
@@ -36,9 +36,14 @@ function report(error: unknown): void {
 }
 
 /**
- * The floating quick entry bar (window label `adversum-quick`). It only
- * collects input: actions are sent to the tray window, which owns the timer
- * operations, and the outcome comes back as a toast.
+ * The window with the label `adversum-quick`. It shows one of two things:
+ *
+ * - the **quick entry bar**, opened by the global shortcut. It only collects
+ *   input: actions are sent to the tray window, which owns the timer
+ *   operations, and the bar closes at once so the user can keep working.
+ * - the **confirmation toast** for any quick action, whichever window or
+ *   shortcut started it. It appears at the bottom center of the screen for a
+ *   few seconds without taking the keyboard.
  */
 export default function QuickEntryWindow() {
   const { t } = useTranslation();
@@ -51,8 +56,8 @@ export default function QuickEntryWindow() {
     isConfigured,
     settings.aliases[activeConnectionId],
   );
-  const [stage, setStage] = useState<Stage>({ name: "input" });
-  const [focusRequest, setFocusRequest] = useState(1);
+  const [stage, setStage] = useState<Stage>({ name: "idle" });
+  const [focusRequest, setFocusRequest] = useState(0);
   const stageRef = useRef(stage);
   stageRef.current = stage;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -65,13 +70,15 @@ export default function QuickEntryWindow() {
         setFocusRequest((request) => request + 1);
       }),
       currentWindow.listen<QuickToastData>(QUICK_TOAST_EVENT, ({ payload }) => {
-        // Confirmations of actions started elsewhere are not this bar's business.
+        // An open bar is not replaced; the user is typing the next entry.
         if (stageRef.current.name !== "input") setStage({ name: "toast", toast: payload });
       }),
       currentWindow.onFocusChanged(({ payload: hasFocus }) => {
-        // Losing focus closes the bar, unless it gave the focus away itself
-        // to show a confirmation.
-        if (!hasFocus && stageRef.current.name === "input") void hideQuickWindow().catch(report);
+        // Clicking elsewhere closes the bar. The toast never has the focus.
+        if (!hasFocus && stageRef.current.name === "input") {
+          setStage({ name: "idle" });
+          void hideQuickWindow().catch(report);
+        }
       }),
     ];
     return () => {
@@ -81,63 +88,75 @@ export default function QuickEntryWindow() {
     };
   }, []);
 
-  // A confirmation (or the wait for one) closes the bar after a few seconds.
+  // Present each toast once it is rendered, and take it away after a while.
+  const toast = stage.name === "toast" ? stage.toast : null;
   useEffect(() => {
-    if (stage.name === "input") return;
-    const timer = setTimeout(
-      () => void hideQuickWindow().catch(report),
-      stage.name === "toast" ? TOAST_DURATION_MS : CONFIRMATION_WAIT_MS,
-    );
+    if (!toast) return;
+    void showQuickToast(toast.undoable).catch(report);
+    const timer = setTimeout(() => {
+      setStage({ name: "idle" });
+      void hideQuickWindow().catch(report);
+    }, TOAST_DURATION_MS);
     return () => clearTimeout(timer);
-  }, [stage]);
+  }, [toast]);
 
   // The native window follows the height of its content.
   useEffect(() => {
     // The root element is always rendered, so the ref is set by now.
     const root = rootRef.current!;
-    const fit = () => void resizeQuickWindow(Math.ceil(root.getBoundingClientRect().height)).catch(report);
+    const fit = () => {
+      const height = Math.ceil(root.getBoundingClientRect().height);
+      if (height > 0) void resizeQuickWindow(height).catch(report);
+    };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(root);
     return () => observer.disconnect();
   }, []);
 
+  const close = () => {
+    setStage({ name: "idle" });
+    void hideQuickWindow().catch(report);
+  };
+
   const send = (action: QuickAction) => {
-    setStage({ name: "sent" });
+    // The bar closes right away; the outcome comes back as a toast.
+    close();
     void emitTo(TRAY_WINDOW_LABEL, QUICK_EXECUTE_EVENT, { action }).catch(report);
-    void releaseQuickWindowFocus().catch(report);
   };
 
   return (
-    <div ref={rootRef} className="p-3" data-quick-stage={stage.name}>
-      <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/95 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#1e1e1e]/95">
-        {stage.name === "toast" ? (
-          <QuickToast
-            variant="window"
-            toast={stage.toast}
-            onUndo={() =>
-              void emitTo(TRAY_WINDOW_LABEL, QUICK_UNDO_EVENT, { id: stage.toast.id }).catch(report)
-            }
-          />
-        ) : stage.name === "sent" ? (
-          <p role="status" className="px-4 py-3.5 text-[15px] text-gray-500 dark:text-gray-400">
-            {t("adversum.quick.working")}
-          </p>
-        ) : !isConfigured ? (
-          <p className="px-4 py-3.5 text-[15px] text-gray-500 dark:text-gray-400">
-            {t("adversum.quick.notConnected")}
-          </p>
-        ) : (
-          <QuickEntryBar
-            variant="window"
-            catalog={catalog}
-            history={history}
-            focusRequest={focusRequest}
-            onAction={send}
-            onClose={() => void hideQuickWindow().catch(report)}
-          />
-        )}
-      </div>
+    <div ref={rootRef} data-quick-stage={stage.name}>
+      {stage.name !== "idle" && (
+        <div className="p-3">
+          <div className="overflow-hidden rounded-2xl border border-black/10 bg-white/95 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur dark:border-white/10 dark:bg-[#1e1e1e]/95">
+            {stage.name === "toast" ? (
+              <QuickToast
+                toast={stage.toast}
+                undoKey={currentPlatform().os === "macos" ? "⌘Z" : "Ctrl+Z"}
+                onUndo={() =>
+                  void emitTo(TRAY_WINDOW_LABEL, QUICK_UNDO_EVENT, {
+                    id: stage.toast.id,
+                  }).catch(report)
+                }
+              />
+            ) : !isConfigured ? (
+              <p className="px-4 py-3.5 text-[15px] text-gray-500 dark:text-gray-400">
+                {t("adversum.quick.notConnected")}
+              </p>
+            ) : (
+              <QuickEntryBar
+                variant="window"
+                catalog={catalog}
+                history={history}
+                focusRequest={focusRequest}
+                onAction={send}
+                onClose={close}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

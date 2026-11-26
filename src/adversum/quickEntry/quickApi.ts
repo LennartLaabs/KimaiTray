@@ -16,9 +16,13 @@ export function hideQuickWindow(): Promise<void> {
   return invoke("adversum_quick_hide");
 }
 
-/** Keeps the window visible but gives keyboard focus back to the user's app. */
-export function releaseQuickWindowFocus(): Promise<void> {
-  return invoke("adversum_quick_release_focus");
+/**
+ * Shows the window as the confirmation toast at the bottom center of the
+ * screen, without taking the keyboard. While `undoable`, the native side holds
+ * Cmd+Z as a global shortcut for undoing the action.
+ */
+export function showQuickToast(undoable: boolean): Promise<void> {
+  return invoke("adversum_quick_toast", { undoable });
 }
 
 export function resizeQuickWindow(height: number): Promise<void> {

@@ -243,7 +243,7 @@ pub fn run() {
             adversum::logos::adversum_logo_clear_manual,
             adversum::quick::adversum_quick_show,
             adversum::quick::adversum_quick_hide,
-            adversum::quick::adversum_quick_release_focus,
+            adversum::quick::adversum_quick_toast,
             adversum::quick::adversum_quick_resize,
         ])
         .setup(|app| {

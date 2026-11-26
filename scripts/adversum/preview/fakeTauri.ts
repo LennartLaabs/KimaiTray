@@ -227,7 +227,7 @@ const commands: Record<string, (args: Args) => unknown> = {
   },
   adversum_quick_show: () => dispatch("adversum://quick-shown", null),
   adversum_quick_hide: () => console.debug("[fake tauri] quick entry bar hidden"),
-  adversum_quick_release_focus: () => null,
+  adversum_quick_toast: ({ undoable }) => console.debug(`[fake tauri] toast shown, undoable=${undoable}`),
   adversum_quick_resize: () => null,
   adversum_logo_list: () => customers.map((customer) => logoEntry(customer.id)),
   adversum_logo_fetch: ({ request }) => logoEntry(request.customerId),

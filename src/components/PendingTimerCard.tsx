@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ColorMode } from "../types";
 import type { StartPreview, StartRetryState } from "../hooks/useStartTask";
 import ColorDots from "./ColorDots";
+import TimerCardTitle from "../adversum/display/TimerCardTitle";
 import TagsList from "./TagsList";
 
 interface PendingTimerCardProps {
@@ -113,12 +114,15 @@ export default function PendingTimerCard({
       >
         <div className="flex min-h-5 items-center gap-2 px-2.5 py-1.5">
           {dots}
+          {/* ADVERSUM: customer first, project and activity on a second line */}
+          <TimerCardTitle projectId={preview.projectId} project={preview.project} activity={preview.activity}>
           <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 truncate">
             {preview.project}
           </span>
           <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
             {preview.activity}
           </span>
+          </TimerCardTitle>
           <span className="ml-auto text-[11px] text-emerald-700/80 dark:text-emerald-400/80 shrink-0">
             {t("tray.starting")}
           </span>
@@ -138,12 +142,15 @@ export default function PendingTimerCard({
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2 mb-1">
           {dots}
+          {/* ADVERSUM: customer first, project and activity on a second line */}
+          <TimerCardTitle projectId={preview.projectId} project={preview.project} activity={preview.activity}>
           <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
             {preview.project}
           </span>
           <span className="text-[10px] text-gray-500 dark:text-gray-400">
             {preview.activity}
           </span>
+          </TimerCardTitle>
         </div>
         {(showNote || preview.description) && (
           <p

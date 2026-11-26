@@ -45,6 +45,7 @@ import {
   QUICK_EXECUTE_EVENT,
   QUICK_TOAST_EVENT,
   QUICK_UNDO_EVENT,
+  QUICK_UNDO_LATEST_EVENT,
   TOAST_DURATION_MS,
 } from "./quickEvents";
 import { useQuickExecutor, type QuickExecutorOptions } from "./useQuickExecutor";
@@ -411,7 +412,7 @@ describe("commands", () => {
 describe("requests from other windows and shortcuts", () => {
   it("executes, undoes and switches back on events", async () => {
     const { result, unmount } = setup({ recentTasks: [recent] });
-    await waitFor(() => expect(Object.keys(handlers)).toHaveLength(3));
+    await waitFor(() => expect(Object.keys(handlers)).toHaveLength(4));
 
     await act(async () => handlers[QUICK_EXECUTE_EVENT]!({ payload: { action: startAction } }));
     await waitFor(() => expect(result.current.toast?.kind).toBe("started"));
@@ -421,6 +422,15 @@ describe("requests from other windows and shortcuts", () => {
 
     await act(async () => handlers[PREVIOUS_TASK_EVENT]!({ payload: null }));
     await waitFor(() => expect(options.startTask).toHaveBeenCalledTimes(2));
+
+    // Cmd+Z undoes whatever the current toast offers, and nothing otherwise.
+    await waitFor(() => expect(result.current.toast?.undoable).toBe(true));
+    mocks.deleteTimesheet.mockClear();
+    await act(async () => handlers[QUICK_UNDO_LATEST_EVENT]!({ payload: null }));
+    await waitFor(() => expect(result.current.toast?.kind).toBe("undone"));
+    expect(mocks.deleteTimesheet).toHaveBeenCalledTimes(1);
+    await act(async () => handlers[QUICK_UNDO_LATEST_EVENT]!({ payload: null }));
+    expect(mocks.deleteTimesheet).toHaveBeenCalledTimes(1);
     unmount();
   });
 

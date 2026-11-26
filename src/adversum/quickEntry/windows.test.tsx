@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   getActivities: vi.fn(),
   fetchHistory: vi.fn(),
   hideQuickWindow: vi.fn(),
-  releaseQuickWindowFocus: vi.fn(),
+  showQuickToast: vi.fn(),
   resizeQuickWindow: vi.fn(),
   emitTo: vi.fn(),
   listen: vi.fn(),
@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   executor: { execute: vi.fn(), undo: vi.fn(), toast: null as unknown },
   useQuickExecutor: vi.fn(),
   loggerError: vi.fn(),
+  os: "macos",
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -43,7 +44,7 @@ vi.mock("../../api/activityApi", () => ({ getActivities: mocks.getActivities }))
 vi.mock("./quickApi", () => ({
   fetchHistory: mocks.fetchHistory,
   hideQuickWindow: mocks.hideQuickWindow,
-  releaseQuickWindowFocus: mocks.releaseQuickWindowFocus,
+  showQuickToast: mocks.showQuickToast,
   resizeQuickWindow: mocks.resizeQuickWindow,
 }));
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: mocks.emitTo }));
@@ -56,6 +57,7 @@ vi.mock("../../settings/service", () => ({
 }));
 vi.mock("./useQuickExecutor", () => ({ useQuickExecutor: mocks.useQuickExecutor }));
 vi.mock("../../utils/logger", () => ({ logger: { error: mocks.loggerError } }));
+vi.mock("../../platform", () => ({ currentPlatform: () => ({ os: mocks.os }) }));
 
 import { setAdversumDisplay } from "../display/displayStore";
 import AdversumPopupQuick from "./AdversumPopupQuick";
@@ -128,7 +130,8 @@ beforeEach(() => {
     focusHandler = handler;
     return vi.fn();
   });
-  for (const mock of [mocks.hideQuickWindow, mocks.releaseQuickWindowFocus, mocks.resizeQuickWindow, mocks.emitTo]) {
+  mocks.os = "macos";
+  for (const mock of [mocks.hideQuickWindow, mocks.showQuickToast, mocks.resizeQuickWindow, mocks.emitTo]) {
     mock.mockResolvedValue(undefined);
   }
   mocks.loadSettings.mockResolvedValue({ theme: "dark", accentStyle: "purple" });
@@ -274,16 +277,12 @@ describe("AdversumPopupQuick", () => {
     expect(last.preview).not.toHaveProperty("description");
   });
 
-  it("hides the bar behind the new-task form and shows the toast with undo", () => {
+  it("shows nothing behind the new-task form, but keeps executing", () => {
     setAdversumDisplay(display);
-    mocks.executor = {
-      ...mocks.executor,
-      toast: { id: 3, kind: "started", label: "DUSW · PM", undoable: true },
-    };
-    render(<AdversumPopupQuick {...options} hidden busy />, { wrapper });
-    expect(screen.queryByRole("combobox")).toBeNull();
-    fireEvent.click(screen.getByText("adversum.quick.undo"));
-    expect(mocks.executor.undo).toHaveBeenCalledWith(3);
+    const { container } = render(<AdversumPopupQuick {...options} hidden busy />, { wrapper });
+    expect(container.innerHTML).toBe("");
+    expect(mocks.useQuickExecutor).toHaveBeenCalled();
+    expect(interruptMenuEntries(task, "x", false)).toHaveLength(1);
   });
 });
 
@@ -294,15 +293,32 @@ describe("QuickEntryWindow", () => {
     return view;
   }
 
-  it("sends actions to the tray window and shows its confirmation", async () => {
-    const { container } = await renderWindow();
-    const input = screen.getByRole("combobox") as HTMLInputElement;
-    expect(document.activeElement).toBe(input);
-    expect(mocks.resizeQuickWindow).toHaveBeenCalled();
-    expect(observed).toHaveLength(1);
-    act(() => observerCallback());
-    expect(mocks.resizeQuickWindow).toHaveBeenCalledTimes(2);
+  function open() {
+    act(() => windowHandlers[QUICK_SHOWN_EVENT]!({ payload: null }));
+    return screen.getByRole("combobox") as HTMLInputElement;
+  }
 
+  const started = { id: 9, kind: "started", label: "DUSW · Projektmanagement", undoable: true };
+
+  it("renders nothing until it is shown, then an empty focused bar", async () => {
+    const { container } = await renderWindow();
+    expect(container.querySelector("[data-quick-stage='idle']")?.innerHTML).toBe("");
+    // An empty window is not measured into a native size.
+    expect(mocks.resizeQuickWindow).not.toHaveBeenCalled();
+    expect(observed).toHaveLength(1);
+
+    const input = open();
+    expect(document.activeElement).toBe(input);
+    expect(container.querySelector("[data-quick-stage='input']")).not.toBeNull();
+    const root = container.firstElementChild as HTMLElement;
+    root.getBoundingClientRect = () => ({ height: 123.2 }) as DOMRect;
+    act(() => observerCallback());
+    expect(mocks.resizeQuickWindow).toHaveBeenCalledWith(124);
+  });
+
+  it("sends an action to the tray window and closes at once", async () => {
+    await renderWindow();
+    const input = open();
     await waitFor(() => {
       fireEvent.change(input, { target: { value: "dusw pm" } });
       expect(screen.getByRole("option", { selected: true })).toBeTruthy();
@@ -311,72 +327,83 @@ describe("QuickEntryWindow", () => {
     expect(mocks.emitTo).toHaveBeenCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
       action: expect.objectContaining({ type: "start", projectId: 11 }),
     });
-    expect(mocks.releaseQuickWindowFocus).toHaveBeenCalled();
-    expect(screen.getByText("adversum.quick.working")).toBeTruthy();
-    expect(container.querySelector("[data-quick-stage='sent']")).not.toBeNull();
-
-    // Giving the focus away for the confirmation must not close the bar.
-    act(() => focusHandler({ payload: false }));
-    expect(mocks.hideQuickWindow).not.toHaveBeenCalled();
-
-    const toast = { id: 9, kind: "started", label: "DUSW · Projektmanagement", undoable: true };
-    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: toast }));
-    expect(screen.getByRole("status").textContent).toContain("adversum.quick.toast.started");
-    fireEvent.click(screen.getByText("adversum.quick.undo"));
-    expect(mocks.emitTo).toHaveBeenCalledWith("tray-popup", QUICK_UNDO_EVENT, { id: 9 });
+    expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("closes after the confirmation, or when none arrives", async () => {
+  it("shows the confirmation as a toast with undo and takes it away after five seconds", async () => {
     await renderWindow();
     vi.useFakeTimers();
-    const input = screen.getByRole("combobox");
-    fireEvent.change(input, { target: { value: "stop" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    act(() => vi.advanceTimersByTime(5999));
+    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: started }));
+    expect(mocks.showQuickToast).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("status").textContent).toContain("adversum.quick.toast.started");
+    expect(screen.getByRole("button").textContent).toContain("⌘Z");
+    fireEvent.click(screen.getByRole("button"));
+    expect(mocks.emitTo).toHaveBeenCalledWith("tray-popup", QUICK_UNDO_EVENT, { id: 9 });
+
+    // The follow-up confirmation replaces the first and restarts the clock.
+    act(() => vi.advanceTimersByTime(TOAST_DURATION_MS - 1000));
+    act(() =>
+      windowHandlers[QUICK_TOAST_EVENT]!({ payload: { id: 10, kind: "undone", label: "", undoable: false } }),
+    );
+    expect(mocks.showQuickToast).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByRole("button")).toBeNull();
+    act(() => vi.advanceTimersByTime(TOAST_DURATION_MS - 1));
     expect(mocks.hideQuickWindow).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
     expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
-
-    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: { id: 1, kind: "stopped", label: "x", undoable: false } }));
-    act(() => vi.advanceTimersByTime(TOAST_DURATION_MS));
-    expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("returns to an empty, focused field every time it is shown", async () => {
+  it("names the undo key of the platform", async () => {
+    mocks.os = "windows";
     await renderWindow();
-    const input = screen.getByRole("combobox") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "stop" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.queryByRole("combobox")).toBeNull();
-    act(() => windowHandlers[QUICK_SHOWN_EVENT]!({ payload: null }));
-    const fresh = screen.getByRole("combobox") as HTMLInputElement;
-    expect(fresh.value).toBe("");
-    expect(document.activeElement).toBe(fresh);
+    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: started }));
+    expect(screen.getByRole("button").textContent).toContain("Ctrl+Z");
   });
 
-  it("closes on Escape and when it loses focus, and ignores foreign confirmations", async () => {
+  it("does not replace an open bar with a confirmation from elsewhere", async () => {
+    await renderWindow();
+    const input = open();
+    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: started }));
+    expect(screen.getByRole("combobox")).toBe(input);
+    expect(mocks.showQuickToast).not.toHaveBeenCalled();
+  });
+
+  it("closes on Escape and when it loses focus, but a toast stays", async () => {
     mocks.hideQuickWindow.mockRejectedValueOnce(new Error("gone"));
     await renderWindow();
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+    fireEvent.keyDown(open(), { key: "Escape" });
     expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(mocks.loggerError).toHaveBeenCalledWith("Quick entry window: Error: gone"),
     );
+    expect(screen.queryByRole("combobox")).toBeNull();
+
+    open();
     act(() => focusHandler({ payload: true }));
     expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
     act(() => focusHandler({ payload: false }));
     expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("combobox")).toBeNull();
 
-    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: { id: 1, kind: "started", label: "x", undoable: true } }));
-    expect(screen.getByRole("combobox")).toBeTruthy();
+    // The toast never has the focus, so losing it means nothing.
+    act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: started }));
+    act(() => focusHandler({ payload: false }));
+    expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status")).toBeTruthy();
   });
 
   it("asks for a connection first and survives missing window events", async () => {
     mocks.kimai = { client: null, isConfigured: false, activeConnectionId: "" };
+    const first = await renderWindow();
+    act(() => windowHandlers[QUICK_SHOWN_EVENT]!({ payload: null }));
+    expect(screen.getByText("adversum.quick.notConnected")).toBeTruthy();
+    first.unmount();
+
     mocks.listen.mockRejectedValue(new Error("no events"));
     mocks.onFocusChanged.mockRejectedValue(new Error("no events"));
     const { unmount } = render(<QuickEntryWindow />, { wrapper });
-    expect(screen.getByText("adversum.quick.notConnected")).toBeTruthy();
     expect(() => unmount()).not.toThrow();
   });
 });

@@ -25,6 +25,7 @@ import {
   QUICK_EXECUTE_EVENT,
   QUICK_TOAST_EVENT,
   QUICK_UNDO_EVENT,
+  QUICK_UNDO_LATEST_EVENT,
   QUICK_WINDOW_LABEL,
   TOAST_DURATION_MS,
   type QuickExecuteRequest,
@@ -313,6 +314,10 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
       }),
       currentWindow.listen<QuickUndoRequest>(QUICK_UNDO_EVENT, ({ payload }) => {
         void undo(payload.id);
+      }),
+      currentWindow.listen(QUICK_UNDO_LATEST_EVENT, () => {
+        const pending = pendingUndo.current;
+        if (pending) void undo(pending.id);
       }),
       currentWindow.listen(PREVIOUS_TASK_EVENT, () => {
         void execute({ type: "command", command: "previous" });

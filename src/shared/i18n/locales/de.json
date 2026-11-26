@@ -827,7 +827,6 @@
       "hints": "↵ starten · ⌘↵ zwischendurch · ⇥ übernehmen · esc schließen",
       "since": "seit {{time}}",
       "futureTime": "Zeit liegt in der Zukunft, startet jetzt",
-      "working": "Wird ausgeführt …",
       "notConnected": "Erst in den Einstellungen mit Kimai verbinden.",
       "undo": "Rückgängig",
       "startBetween": "Zwischendurch starten",

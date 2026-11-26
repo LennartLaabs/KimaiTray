@@ -26,6 +26,7 @@ marked `ADVERSUM:`. See the repository `CLAUDE.md` for the fork rules.
 | `AdversumBridge.tsx` | Loads projects, customers, fork settings and logos for a window and publishes them to the display store. | `main.tsx` |
 | `display/CustomerIndicator.tsx` | Customer avatar that replaces the color dots in logo mode (20 px in lists, 28 px in roomy timer cards). | `components/ColorDots.tsx` plus a `projectId` prop at each of its call sites; `hooks/useStartTask.ts` (`StartPreview.projectId`) |
 | `display/taskLabel.ts` | Customer-first labels for list entries: line 1 customer, line 2 project, activity, note. | `components/FavoriteTaskItem.tsx`, `RecentTaskItem.tsx`, `TodayEntryItem.tsx` |
+| `display/TimerCardTitle.tsx` | Customer-first title of the timer cards: line 1 customer, line 2 project and activity. Wraps upstream's title markup and renders it unchanged when the fork display is off. | `components/ActiveTimerCard.tsx`, `PausedTimerCard.tsx`, `PendingTimerCard.tsx` |
 | `logos/` | Logo cache client (`logoApi.ts`), homepage lookup (`customerHomepage.ts`), loading and background fetching (`useCustomerLogos.ts`), avatar (`CustomerAvatar.tsx`), manual image conversion (`encodeImage.ts`). | none |
 | `settings/CustomerLogosSection.tsx`, `settings/QuickEntrySection.tsx`, `settings/navigation.tsx` | Settings pages "Customer logos" and "Quick entry", and the fork's sidebar group. | `windows/Settings.tsx`, `types.ts` (`SettingsSection`), `tauri.conf.json` (`dragDropEnabled: false` on the settings window, so HTML5 file drops work) |
 | `quickEntry/` parser (`normalize.ts`, `timeParser.ts`, `commands.ts`, `catalog.ts`, `history.ts`, `parse.ts`) | Pure functions that turn typed text into a command or ranked suggestions. No React, no I/O. | none |
@@ -97,20 +98,23 @@ The tray window owns all timer operations (`useStartTask`, `usePauseTimer`, lock
 |---|---|---|
 | `adversum://quick-shown` | Rust → quick window | The bar was shown: clear and focus. |
 | `adversum://quick-execute` | quick window, reminder → tray | Run this `QuickAction`. |
-| `adversum://quick-toast` | tray → quick window | Outcome of the last action. |
-| `adversum://quick-undo` | quick window → tray | Undo the action behind a toast. |
+| `adversum://quick-toast` | tray → quick window | Outcome of an action; shown as the toast overlay. |
+| `adversum://quick-undo` | quick window → tray | Undo the action behind a toast (click). |
+| `adversum://quick-undo-latest` | Rust (Cmd+Z while a toast offers undo) → tray | Undo the latest action. |
 | `adversum://previous-task` | Rust (shortcut) → tray | Switch to the previous task. |
 
 Windows may only `emitTo` a named window (`core:event:allow-emit-to`); plain `emit` is not permitted by the capabilities.
 
 - **Start** uses `startTask`, with `begin` for a start in the past (same path as upstream's custom start time).
 - **Finished entry** posts begin and end directly (`createFinishedEntry`); no timer is touched.
-- **Undo** (5 seconds) deletes the new entry and lets the entries that were stopped run again. `reopenTimesheet` first tries to clear the entry's end (`PATCH {end: null}`), so it continues as if never stopped; if Kimai refuses, it falls back to `restart`, which is what upstream does when resuming.
+- **Confirmation**: every quick action, from whichever window or shortcut, is confirmed by a toast. The quick entry window shows it as an overlay at the bottom center of the screen for 5 seconds, without taking the keyboard. The bar itself closes right after Enter.
+- **Undo** (while the toast is up): by clicking "Undo", or with Cmd+Z, which the native side registers as a global shortcut only for as long as an undoable toast is visible. Undo deletes the new entry and lets the entries that were stopped run again. `reopenTimesheet` first tries to clear the entry's end (`PATCH {end: null}`), so it continues as if never stopped; if Kimai refuses, it falls back to `restart`, which is what upstream does when resuming.
 - **Start in between** (⌘Enter in the bar, context menu in the popup): pauses the running timer with upstream's pause, starts the new task and stores an `InterruptLink` (`interruptLink.ts`, `localStorage`). When that task is stopped, the paused timer resumes. It does not resume when the user switched to another task or paused the task itself.
 - **Previous task** (shortcut, or `zurück`): starts the newest recent task that is not running. Pressed again it leads back, because by then the roles have swapped.
 
 ### Native side (`src-tauri/src/adversum/`)
 
-- `quick.rs`: shows the window at the top center of the monitor under the pointer, hides, resizes to content. `quick_panel.rs` (macOS): hosts the webview in a non-activating `NSPanel`, mirroring upstream's `tray/platform/macos_panel.rs`. Typing into the bar does not activate the app; `adversum_quick_release_focus` hands the keyboard back to the user's application while the confirmation toast stays visible.
+- `quick.rs`: one window with two placements on the screen under the pointer. As the **bar** it is horizontally centered with its top edge 20 % below the top of the visible area (below the menu bar); the top edge is fixed and the suggestion list grows downward. As the **toast** it stands at the bottom center and never takes the keyboard. `top_left` is the pure placement math and is unit-tested.
+- `quick_panel.rs` (macOS): hosts the webview in a non-activating `NSPanel`, mirroring upstream's `tray/platform/macos_panel.rs`, and places the panel itself in Cocoa screen points (`NSEvent.mouseLocation`, `NSScreen.visibleFrame`). Do not size or move it through the Tauri window: `set_size` keeps the bottom edge fixed, which pushes a growing bar up and off the screen, and `set_position` converts with a single scale factor, which is wrong between monitors of different density.
 - `shortcuts.rs`: registers the two fork shortcuts from the fork settings. Upstream's `register_handlers` calls `unregister_all`, so it ends with a hook that registers ours again. A shortcut the system refuses is not saved (`adversum_patch_settings` registers before it persists).
-- Dev check without pressing a shortcut: `ADVERSUM_SHOW_QUICK=1 npm run tauri dev` opens the bar at launch (debug builds only).
+- Dev check without pressing a shortcut (debug builds only): `ADVERSUM_SHOW_QUICK=1 npm run tauri dev` opens the bar at launch and resizes it once, `ADVERSUM_SHOW_QUICK=toast …` shows the toast. The log lines "Quick entry panel placed" give the frame and the visible screen area in points. While the installed app is running, add `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, because a second instance with the same identifier exits at once.

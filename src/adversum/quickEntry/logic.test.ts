@@ -22,9 +22,9 @@ import {
   createFinishedEntry,
   fetchHistory,
   hideQuickWindow,
-  releaseQuickWindowFocus,
   reopenTimesheet,
   resizeQuickWindow,
+  showQuickToast,
 } from "./quickApi";
 
 const now = new Date(2026, 10, 26, 10, 20);
@@ -180,11 +180,11 @@ describe("quick window commands", () => {
   it("call the native commands", async () => {
     mocks.invoke.mockResolvedValue(undefined);
     await hideQuickWindow();
-    await releaseQuickWindowFocus();
+    await showQuickToast(true);
     await resizeQuickWindow(120);
     expect(mocks.invoke.mock.calls).toEqual([
       ["adversum_quick_hide"],
-      ["adversum_quick_release_focus"],
+      ["adversum_quick_toast", { undoable: true }],
       ["adversum_quick_resize", { height: 120 }],
     ]);
   });

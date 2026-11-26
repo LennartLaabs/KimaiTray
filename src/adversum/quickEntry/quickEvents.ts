@@ -13,6 +13,8 @@ export const QUICK_EXECUTE_EVENT = "adversum://quick-execute";
 export const QUICK_TOAST_EVENT = "adversum://quick-toast";
 /** Any window → tray window: undo the action behind this toast. */
 export const QUICK_UNDO_EVENT = "adversum://quick-undo";
+/** Native side (Cmd+Z while a toast offers it) → tray window: undo the latest action. */
+export const QUICK_UNDO_LATEST_EVENT = "adversum://quick-undo-latest";
 /** Native side → tray window: the "previous task" shortcut was pressed. */
 export const PREVIOUS_TASK_EVENT = "adversum://previous-task";
 

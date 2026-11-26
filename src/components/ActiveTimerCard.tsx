@@ -13,6 +13,7 @@ import TagsList from "./TagsList";
 import TagsInput from "./TagsInput";
 import DateTimePicker from "./DateTimePicker";
 import ColorDots from "./ColorDots";
+import TimerCardTitle from "../adversum/display/TimerCardTitle";
 import {
   customInputLabel,
   customInputPlaceholder,
@@ -367,12 +368,15 @@ export default function ActiveTimerCard({
             />
           ) : (
             <>
+              {/* ADVERSUM: customer first, project and activity on a second line */}
+              <TimerCardTitle projectId={timer.projectId} project={timer.project} activity={timer.activity}>
               <span className="text-[11px] font-medium text-gray-800 dark:text-gray-200 truncate">
                 {timer.project}
               </span>
               <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
                 {timer.activity}
               </span>
+              </TimerCardTitle>
             </>
           )}
           <span className="ml-auto text-[13px] font-mono font-semibold tabular-nums text-emerald-700 dark:text-emerald-400 tracking-tight shrink-0">
@@ -431,12 +435,15 @@ export default function ActiveTimerCard({
             projectId={timer.projectId} // ADVERSUM: customer logo
             variant="card"
           />
+          {/* ADVERSUM: customer first, project and activity on a second line */}
+          <TimerCardTitle projectId={timer.projectId} project={timer.project} activity={timer.activity}>
           <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
             {timer.project}
           </span>
           <span className="text-[10px] text-gray-500 dark:text-gray-400">
             {timer.activity}
           </span>
+          </TimerCardTitle>
           {(multipleActive || isSaving || timeEstimate != null) && (
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
               {multipleActive && (

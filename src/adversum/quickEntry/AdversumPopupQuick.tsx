@@ -3,7 +3,6 @@ import { useAdversumDisplay } from "../display/displayStore";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
 import { registerPopupQuick, type BridgeTask } from "./popupBridge";
 import QuickEntryBar from "./QuickEntryBar";
-import QuickToast from "./QuickToast";
 import { useQuickEntryData } from "./useQuickEntryData";
 import { useQuickExecutor, type QuickExecutorOptions } from "./useQuickExecutor";
 
@@ -14,9 +13,11 @@ interface AdversumPopupQuickProps extends QuickExecutorOptions {
 
 /**
  * The fork's layer in the tray popup: the quick entry bar as the popup's
- * search field, the executor that runs quick actions from every window, and
- * the confirmation toast. Renders nothing outside the running app, where the
- * display store is empty (upstream's own popup tests).
+ * search field and the executor that runs quick actions from every window.
+ * Confirmations are shown by the quick entry window as an overlay at the
+ * bottom of the screen, wherever the action came from. Renders nothing
+ * outside the running app, where the display store is empty (upstream's own
+ * popup tests).
  */
 export default function AdversumPopupQuick(props: AdversumPopupQuickProps) {
   return useAdversumDisplay() ? <PopupQuick {...props} /> : null;
@@ -29,7 +30,7 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
     options.timersReady,
     settings.aliases[options.connectionId],
   );
-  const { execute, undo, toast } = useQuickExecutor(options);
+  const { execute } = useQuickExecutor(options);
   const [focus, setFocus] = useState({ request: 0, text: "" });
   const executeRef = useRef(execute);
   executeRef.current = execute;
@@ -61,21 +62,17 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
     return () => registerPopupQuick(null);
   }, []);
 
+  if (hidden) return null;
   return (
-    <>
-      {!hidden && (
-        <QuickEntryBar
-          variant="popup"
-          catalog={catalog}
-          history={history}
-          focusRequest={focus.request}
-          seedText={focus.text}
-          disabled={options.busy}
-          onAction={(action) => void execute(action)}
-          onClose={() => (document.activeElement as HTMLElement | null)?.blur()}
-        />
-      )}
-      {toast && <QuickToast variant="popup" toast={toast} onUndo={() => void undo(toast.id)} />}
-    </>
+    <QuickEntryBar
+      variant="popup"
+      catalog={catalog}
+      history={history}
+      focusRequest={focus.request}
+      seedText={focus.text}
+      disabled={options.busy}
+      onAction={(action) => void execute(action)}
+      onClose={() => (document.activeElement as HTMLElement | null)?.blur()}
+    />
   );
 }

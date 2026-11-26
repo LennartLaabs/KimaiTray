@@ -319,26 +319,27 @@ describe("QuickEntryBar", () => {
 describe("QuickToast", () => {
   const toast = { id: 4, kind: "started" as const, label: "DUSW · Projektmanagement", undoable: true };
 
-  it("confirms the action and offers undo", () => {
+  it("confirms the action and offers undo by click, naming the key for it", () => {
     const onUndo = vi.fn();
-    const { container, rerender } = render(<QuickToast variant="popup" toast={toast} onUndo={onUndo} />);
+    const { container } = render(<QuickToast toast={toast} onUndo={onUndo} undoKey="⌘Z" />);
     expect(screen.getByRole("status").textContent).toContain(
       "adversum.quick.toast.started:DUSW · Projektmanagement",
     );
-    fireEvent.click(screen.getByText("adversum.quick.undo"));
+    const undo = screen.getByRole("button");
+    expect(undo.textContent).toBe("adversum.quick.undo⌘Z");
+    fireEvent.click(undo);
     expect(onUndo).toHaveBeenCalledTimes(1);
     expect(container.querySelector("[data-quick-toast='started']")).not.toBeNull();
-
-    rerender(<QuickToast variant="window" toast={toast} onUndo={onUndo} />);
-    expect(screen.getByText("adversum.quick.undo").className).toContain("text-[13px]");
   });
 
-  it("shows failures without undo in both variants", () => {
+  it("shows failures and plain confirmations without undo", () => {
     const failed = { id: 5, kind: "failed" as const, label: "", undoable: false };
-    const { rerender } = render(<QuickToast variant="popup" toast={failed} onUndo={vi.fn()} />);
-    expect(screen.queryByText("adversum.quick.undo")).toBeNull();
-    expect(screen.getByText("adversum.quick.toast.failed:").className).toContain("text-red-300");
-    rerender(<QuickToast variant="window" toast={failed} onUndo={vi.fn()} />);
+    const { rerender } = render(<QuickToast toast={failed} onUndo={vi.fn()} undoKey="⌘Z" />);
+    expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByText("adversum.quick.toast.failed:").className).toContain("text-red-600");
+    rerender(
+      <QuickToast toast={{ ...failed, kind: "stopped", label: "x" }} onUndo={vi.fn()} undoKey="⌘Z" />,
+    );
+    expect(screen.getByText("adversum.quick.toast.stopped:x").className).not.toContain("red");
   });
 });

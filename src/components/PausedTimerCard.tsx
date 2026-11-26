@@ -5,6 +5,7 @@ import type { PausedTimerData } from "../api/pauseStore";
 import type { ColorMode } from "../types";
 import TagsList from "./TagsList";
 import ColorDots from "./ColorDots";
+import TimerCardTitle from "../adversum/display/TimerCardTitle";
 import { separator, showContextMenu, type ContextMenuEntry } from "./contextMenu";
 import { RetryStatus } from "./PendingTimerCard";
 import type { StartRetryState } from "../hooks/startRetry";
@@ -91,6 +92,8 @@ export default function PausedTimerCard({
             colorMode={colorMode}
             projectId={paused.projectId} // ADVERSUM: customer logo
           />
+          {/* ADVERSUM: customer first, project and activity on a second line */}
+          <TimerCardTitle projectId={paused.projectId} project={paused.project} activity={paused.activity} grow>
           <div className="min-w-0 flex flex-1 items-center gap-2">
             <span className="min-w-0 max-w-[55%] shrink truncate text-[11px] font-medium leading-4 text-gray-800 dark:text-gray-200">
               {paused.project}
@@ -113,6 +116,7 @@ export default function PausedTimerCard({
               )}
             </span>
           </div>
+          </TimerCardTitle>
           <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 shrink-0">
             {t("pause.paused")}
           </span>
@@ -172,12 +176,15 @@ export default function PausedTimerCard({
             projectId={paused.projectId} // ADVERSUM: customer logo
             variant="card"
           />
+          {/* ADVERSUM: customer first, project and activity on a second line */}
+          <TimerCardTitle projectId={paused.projectId} project={paused.project} activity={paused.activity}>
           <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
             {paused.project}
           </span>
           <span className="text-[10px] text-gray-500 dark:text-gray-400">
             {paused.activity}
           </span>
+          </TimerCardTitle>
           <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 shrink-0">
             {t("pause.paused")}
           </span>

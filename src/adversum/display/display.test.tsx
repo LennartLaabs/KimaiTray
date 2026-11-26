@@ -23,8 +23,14 @@ import FavoriteTaskItem from "../../components/FavoriteTaskItem";
 import RecentTaskItem from "../../components/RecentTaskItem";
 import TodayEntryItem from "../../components/TodayEntryItem";
 import PendingTimerCard from "../../components/PendingTimerCard";
+import PausedTimerCard from "../../components/PausedTimerCard";
+import ActiveTimerCard from "../../components/ActiveTimerCard";
+import TimerCardTitle from "./TimerCardTitle";
 import type { FavoriteTask, RecentTask, TodayEntry } from "../../types";
 
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ listen: async () => () => undefined }),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -203,5 +209,61 @@ describe("hooks in upstream components", () => {
     expect(container.querySelector<HTMLElement>("[data-customer-avatar]")!.style.width).toBe("20px");
     rerender(<PendingTimerCard preview={{ ...preview, projectId: undefined }} compact />);
     expect(container.querySelector("[data-customer-avatar]")).toBeNull();
+  });
+
+  it("timer cards put the customer first, with project and activity below", () => {
+    const upstream = <span data-upstream>Marketing Retainer</span>;
+    const title = (projectId?: number, grow = false) => (
+      <TimerCardTitle projectId={projectId} project="Marketing Retainer" activity="Projektmanagement" grow={grow}>
+        {upstream}
+      </TimerCardTitle>
+    );
+    // Upstream's markup stays outside the app, without a project and for an unknown customer.
+    const { container, rerender } = render(title(12));
+    expect(container.querySelector("[data-upstream]")).not.toBeNull();
+    act(() => setAdversumDisplay(display));
+    rerender(title(undefined));
+    expect(container.querySelector("[data-upstream]")).not.toBeNull();
+    rerender(title(99));
+    expect(container.querySelector("[data-upstream]")).not.toBeNull();
+
+    rerender(title(12));
+    const label = container.querySelector<HTMLElement>("[data-card-title]")!;
+    expect(container.querySelector("[data-upstream]")).toBeNull();
+    expect(label.children[0]!.textContent).toBe("DUSW Unternehmensgruppe");
+    expect(label.children[0]!.className).toContain("font-semibold");
+    expect(label.children[1]!.textContent).toBe("Marketing Retainer · Projektmanagement");
+    expect(label.className).not.toContain("flex-1");
+    rerender(title(12, true));
+    expect(container.querySelector("[data-card-title]")!.className).toContain("flex-1");
+  });
+
+  it("active, paused and pending cards use the customer-first title", () => {
+    setAdversumDisplay(display);
+    const noop = () => undefined;
+    const timer = {
+      id: 5, projectId: 12, activityId: 3, project: "Marketing Retainer", activity: "Projektmanagement",
+      description: "", tags: [], beginSeconds: 0, beginIso: "2026-11-26T09:00:00+0100", ...colors,
+    };
+    const paused = {
+      id: "p1", connectionId: "c", lastTimesheetId: 5, projectId: 12, activityId: 3,
+      project: "Marketing Retainer", activity: "Projektmanagement", description: "", tags: [],
+      pausedAt: "2026-11-26T10:00:00.000Z", ...colors,
+    };
+    const preview = { project: "Marketing Retainer", activity: "Projektmanagement", ...colors, projectId: 12 };
+    for (const element of [
+      <ActiveTimerCard key="a" timer={timer} onStop={noop} />,
+      <ActiveTimerCard key="ac" timer={timer} onStop={noop} compact />,
+      <PausedTimerCard key="p" paused={paused} onResume={noop} onStop={noop} />,
+      <PausedTimerCard key="pc" paused={paused} onResume={noop} onStop={noop} compact />,
+      <PendingTimerCard key="n" preview={preview} />,
+      <PendingTimerCard key="nc" preview={preview} compact />,
+    ]) {
+      const { container, unmount } = render(element);
+      const label = container.querySelector<HTMLElement>("[data-card-title]");
+      expect(label?.children[0]?.textContent).toBe("DUSW Unternehmensgruppe");
+      expect(label?.children[1]?.textContent).toBe("Marketing Retainer · Projektmanagement");
+      unmount();
+    }
   });
 });
