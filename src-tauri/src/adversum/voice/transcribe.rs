@@ -1,0 +1,237 @@
+//! Speech to text with whisper.cpp, entirely on this machine.
+//!
+//! The model stays loaded between recordings and is released after a while
+//! without use, because it occupies several hundred megabytes of memory.
+
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
+
+use super::audio;
+
+/// Without a recording for this long the model is unloaded.
+const UNLOAD_AFTER: Duration = Duration::from_secs(10 * 60);
+const THREADS: i32 = 4;
+
+struct Engine {
+    path: PathBuf,
+    // The state borrows nothing from the context in Rust terms, but must not
+    // outlive it: fields drop in declaration order, the state first.
+    state: WhisperState,
+    _context: WhisperContext,
+}
+
+static ENGINE: Mutex<Option<Engine>> = Mutex::new(None);
+static USES: AtomicU64 = AtomicU64::new(0);
+
+fn engine() -> std::sync::MutexGuard<'static, Option<Engine>> {
+    ENGINE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// How thorough a transcription is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Quality {
+    /// The final text of a recording.
+    Final,
+    /// A quick intermediate text while the recording still runs.
+    Preview,
+}
+
+/// Live previews need the GPU to keep up; Intel Macs transcribe on the CPU.
+pub(crate) fn supports_preview() -> bool {
+    cfg!(target_arch = "aarch64")
+}
+
+fn load(path: &Path) -> Result<Engine, String> {
+    whisper_rs::install_logging_hooks();
+    let mut parameters = WhisperContextParameters::default();
+    // Metal is reliable on Apple Silicon only.
+    parameters.use_gpu(cfg!(target_arch = "aarch64"));
+    let path_text = path.to_str().ok_or("The model path is not valid Unicode")?;
+    let context = WhisperContext::new_with_params(path_text, parameters)
+        .map_err(|error| format!("Cannot load the speech model: {error}"))?;
+    let state = context
+        .create_state()
+        .map_err(|error| format!("Cannot prepare the speech model: {error}"))?;
+    log::info!("Speech model loaded: {}", path.display());
+    Ok(Engine {
+        path: path.to_path_buf(),
+        state,
+        _context: context,
+    })
+}
+
+fn ensure<'a>(slot: &'a mut Option<Engine>, path: &Path) -> Result<&'a mut Engine, String> {
+    if slot.as_ref().is_some_and(|engine| engine.path != path) {
+        *slot = None;
+    }
+    if slot.is_none() {
+        *slot = Some(load(path)?);
+    }
+    Ok(slot.as_mut().expect("engine was just loaded"))
+}
+
+/// Loads the model ahead of the first transcription, while the user speaks.
+pub(crate) fn preload(path: &Path) {
+    if let Err(error) = ensure(&mut engine(), path) {
+        log::warn!("{error}");
+    }
+}
+
+pub(crate) fn unload() {
+    if engine().take().is_some() {
+        log::info!("Speech model unloaded");
+    }
+}
+
+/// Whether a model is loaded and free right now.
+#[cfg(test)]
+pub(crate) fn is_idle_and_loaded() -> bool {
+    ENGINE
+        .try_lock()
+        .map(|slot| slot.is_some())
+        .unwrap_or(false)
+}
+
+/// Releases the model once `UNLOAD_AFTER` passes without another use.
+fn schedule_unload() {
+    let use_number = USES.fetch_add(1, Ordering::SeqCst) + 1;
+    std::thread::spawn(move || {
+        std::thread::sleep(UNLOAD_AFTER);
+        if USES.load(Ordering::SeqCst) == use_number {
+            unload();
+        }
+    });
+}
+
+/// Joins the segments Whisper returned into one line of text.
+pub(crate) fn join_segments<'a>(segments: impl IntoIterator<Item = &'a str>) -> String {
+    segments
+        .into_iter()
+        .flat_map(str::split_whitespace)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Transcribes 16 kHz mono speech as German. `vocabulary` primes the model
+/// with the names it should expect. A set `abort` flag ends the run early.
+pub(crate) fn transcribe(
+    model: &Path,
+    samples: &[f32],
+    vocabulary: &str,
+    quality: Quality,
+    abort: Arc<AtomicBool>,
+) -> Result<String, String> {
+    let padded = audio::pad_for_whisper(samples.to_vec());
+    let mut slot = engine();
+    let engine = ensure(&mut slot, model)?;
+
+    let mut params = FullParams::new(match quality {
+        Quality::Final => SamplingStrategy::BeamSearch {
+            beam_size: 5,
+            patience: -1.0,
+        },
+        Quality::Preview => SamplingStrategy::Greedy { best_of: 1 },
+    });
+    params.set_language(Some("de"));
+    params.set_translate(false);
+    // Each recording stands alone; only the vocabulary primes the decoder.
+    params.set_no_context(true);
+    params.set_no_timestamps(true);
+    params.set_single_segment(quality == Quality::Preview);
+    params.set_suppress_blank(true);
+    params.set_suppress_nst(true);
+    params.set_temperature(0.0);
+    params.set_n_threads(THREADS);
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+    if !vocabulary.is_empty() {
+        params.set_initial_prompt(vocabulary);
+    }
+    let abort_flag = abort.clone();
+    params.set_abort_callback_safe(move || abort_flag.load(Ordering::Relaxed));
+
+    let outcome = engine.state.full(params, &padded);
+    if abort.load(Ordering::Relaxed) {
+        return Err("Transcription was cancelled".into());
+    }
+    outcome.map_err(|error| format!("Transcription failed: {error}"))?;
+    let segments: Vec<String> = engine
+        .state
+        .as_iter()
+        .map(|segment| segment.to_str_lossy().map(|text| text.into_owned()))
+        .collect::<Result<_, _>>()
+        .map_err(|error| format!("Transcription failed: {error}"))?;
+    drop(slot);
+    if quality == Quality::Final {
+        schedule_unload();
+    }
+    Ok(join_segments(segments.iter().map(String::as_str)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn segments_become_one_line() {
+        assert_eq!(
+            join_segments([" DUSW Projektmanagement,", " Gigi Call  seit zehn Uhr.\n"]),
+            "DUSW Projektmanagement, Gigi Call seit zehn Uhr."
+        );
+        assert_eq!(join_segments([" ", ""]), "");
+    }
+
+    /// Runs a real transcription. Needs a model and a 16 kHz mono 16-bit WAV:
+    ///
+    /// ```sh
+    /// say -v Anna -o /tmp/voice.aiff "DUSW Projektmanagement, Gigi Call seit zehn Uhr"
+    /// afconvert -f WAVE -d LEI16@16000 -c 1 /tmp/voice.aiff /tmp/voice.wav
+    /// ADVERSUM_VOICE_MODEL=/path/ggml-small.bin ADVERSUM_VOICE_WAV=/tmp/voice.wav \
+    ///   cargo test adversum::voice -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "needs a downloaded model and a recording"]
+    fn transcribes_a_recording_with_the_vocabulary() {
+        let model = std::env::var("ADVERSUM_VOICE_MODEL").expect("ADVERSUM_VOICE_MODEL");
+        let wav = std::fs::read(std::env::var("ADVERSUM_VOICE_WAV").expect("ADVERSUM_VOICE_WAV"))
+            .unwrap();
+        let data = wav
+            .windows(4)
+            .position(|window| window == b"data")
+            .expect("a WAV data chunk")
+            + 8;
+        let samples: Vec<f32> = wav[data..]
+            .chunks_exact(2)
+            .map(|pair| f32::from(i16::from_le_bytes([pair[0], pair[1]])) / 32_768.0)
+            .collect();
+        let vocabulary = std::env::var("ADVERSUM_VOICE_PROMPT").unwrap_or_else(|_| {
+            "Zeiterfassung: DUSW, SolarTech NRW, K&K, Projektmanagement, Austausch, Gigi.".into()
+        });
+        for quality in [Quality::Preview, Quality::Final] {
+            let started = std::time::Instant::now();
+            let text = transcribe(
+                Path::new(&model),
+                &samples,
+                &vocabulary,
+                quality,
+                Arc::new(AtomicBool::new(false)),
+            )
+            .unwrap();
+            println!("{:?}: {text}", started.elapsed());
+            assert!(!text.is_empty());
+        }
+        assert!(is_idle_and_loaded());
+        unload();
+        assert!(!is_idle_and_loaded());
+    }
+}

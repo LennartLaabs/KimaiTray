@@ -245,6 +245,18 @@ pub fn run() {
             adversum::quick::adversum_quick_hide,
             adversum::quick::adversum_quick_toast,
             adversum::quick::adversum_quick_resize,
+            adversum::settings::adversum_learn_alias,
+            adversum::voice::adversum_voice_status,
+            adversum::voice::adversum_voice_download,
+            adversum::voice::adversum_voice_cancel_download,
+            adversum::voice::adversum_voice_delete_model,
+            adversum::voice::adversum_voice_choose_dir,
+            adversum::voice::adversum_voice_request_permission,
+            adversum::voice::adversum_voice_open_privacy,
+            adversum::voice::adversum_voice_start,
+            adversum::voice::adversum_voice_finish,
+            adversum::voice::adversum_voice_cancel,
+            adversum::voice::adversum_voice_set_vocabulary,
         ])
         .setup(|app| {
             info!(

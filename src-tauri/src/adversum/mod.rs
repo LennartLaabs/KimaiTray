@@ -6,6 +6,7 @@ pub(crate) mod quick;
 mod quick_panel;
 pub(crate) mod settings;
 pub(crate) mod shortcuts;
+pub(crate) mod voice;
 
 /// Startup work of the fork, called once from `lib.rs` after upstream's setup.
 pub(crate) fn setup(app: &tauri::AppHandle) {

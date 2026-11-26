@@ -9,6 +9,9 @@
 //!   keyboard, so the user's application keeps working. While an action can
 //!   be undone, Cmd+Z is registered as a global shortcut for it.
 //!
+//! Voice input (`voice/`) borrows the bar's place for its recording overlay
+//! and confirmation card.
+//!
 //! On macOS the webview is hosted in a non-activating panel
 //! (`quick_panel.rs`) that is placed directly in screen points. That avoids
 //! every conversion between logical and physical pixels, which is what goes
@@ -190,7 +193,18 @@ fn present(app: &AppHandle, placement: Placement) -> bool {
     true
 }
 
+/// Shows the window in the bar's place for voice input: the recording
+/// overlay and then the confirmation card. It takes the keyboard, so Escape
+/// and Enter reach it. The frontend switches to the voice view when the
+/// first `adversum://voice-state` event arrives.
+pub(crate) fn show_voice(app: &AppHandle) -> bool {
+    set_undo_shortcut(app, false);
+    present(app, Placement::Bar)
+}
+
 pub(crate) fn show(app: &AppHandle) {
+    // Typing replaces a voice input that may be under way.
+    super::voice::cancel();
     // A new entry replaces a toast that may still be up, and its undo key.
     set_undo_shortcut(app, false);
     if present(app, Placement::Bar) {
@@ -201,6 +215,8 @@ pub(crate) fn show(app: &AppHandle) {
 }
 
 pub(crate) fn hide(app: &AppHandle) {
+    // Whatever closes the window also ends a recording shown in it.
+    super::voice::cancel();
     set_undo_shortcut(app, false);
     set_showing(None);
     let Some(window) = window(app) else {

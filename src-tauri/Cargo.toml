@@ -37,12 +37,21 @@ tokio = { version = "1", features = ["macros", "net", "rt", "sync", "time"] }
 # ADVERSUM: customer logos are decoded and re-encoded as PNG natively.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "webp", "gif", "bmp"] }
 base64 = "0.23"
+# ADVERSUM: checksum of downloaded speech models.
+sha2 = "0.10"
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-deep-link = "2.6.3"
 tauri-plugin-single-instance = { version = "2.5.5", features = ["deep-link"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# ADVERSUM: local voice input (microphone capture, whisper.cpp with Metal,
+# folder picker for the model location). macOS only for now.
+cpal = "0.18"
+whisper-rs = { version = "0.16", features = ["metal"] }
+rfd = { version = "0.18", default-features = false }
+# ADVERSUM: completion handler of the microphone permission request.
+block2 = "0.6"
 objc = "0.2"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSColor", "NSGraphics", "NSPanel", "NSStatusItem", "NSView", "NSWindow"] }

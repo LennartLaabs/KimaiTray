@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- ADVERSUM: voice input records speech and transcribes it on this Mac. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>KimaiTray Adversum hört bei gedrückter Sprachtaste zu, um Timer per Sprache zu starten. Die Aufnahme wird nur auf diesem Mac ausgewertet und nicht gespeichert.</string>
+</dict>
+</plist>
