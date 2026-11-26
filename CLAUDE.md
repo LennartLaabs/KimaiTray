@@ -29,17 +29,29 @@ Build a disk image only when Lennart asks for one for someone else (Patrick): `.
 
 **Never start the app from the build folder or with `npm run tauri dev` while Lennart uses the installed one**, and never leave such an instance running. If a native check needs a dev instance, tell him first, use `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, and quit it when done. `install.sh` quits every copy and warns if one outside `/Applications` is still running. Debug builds use the keychain service `io.adversum.kimaitray.dev`, so they cannot touch the real API token.
 
-## Code signing
+## Code signing and the keychain
 
-macOS ties "Always Allow" for a keychain entry, and privacy permissions such as the microphone, to the app's *designated requirement*. An ad-hoc signature has a new one with every build, so macOS asked for the keychain after every install. Release builds are therefore signed with a local self-signed certificate:
+Two separate mechanisms decide whether macOS asks again after a new build. Both are handled by the scripts; do not "simplify" either away.
+
+**1. Signature: certificate "Adversum Dev".** Privacy permissions such as the microphone are tied to the app's *designated requirement*. An ad-hoc signature has a new one with every build. Release builds are therefore signed with a local self-signed certificate:
 
 - Certificate **"Adversum Dev"** (code signing only, valid until November 2036), private key in Lennart's login keychain, trusted for code signing for his user. Created by `./scripts/adversum/setup-signing.sh`; run it again on a new Mac or after the certificate expired.
 - `scripts/adversum/signing.sh` (sourced by `install.sh` and `build-dmg.sh`) sets `APPLE_SIGNING_IDENTITY` to it and prints signer and designated requirement after each build. The requirement must read `identifier "io.adversum.kimaitray" and certificate leaf = H"…"` with the same hash every time. Without the certificate the scripts fall back to ad hoc and say so.
-- Dialogs only a human can answer, each once: the trust change in `setup-signing.sh` (password or Touch ID); "codesign wants to sign using key Adversum Dev" at the first build (password, **Always Allow**); the keychain question for `io.adversum.kimaitray` at the first start of the first signed build (password, **Always Allow**). Tell Lennart before any step that brings one up. After that, installs are silent.
-- A new certificate (expired, deleted, other Mac) is a new requirement: the keychain asks once more, and macOS forgets the microphone permission.
-- Do not read keychain access lists with `security dump-keychain -a`: it opens a dialog for every entry. `security find-generic-password -s io.adversum.kimaitray` (without `-w`/`-g`) shows the entry's attributes silently. Never read the token itself.
 
-**For Patrick (any other Mac):** the certificate is self-signed and only trusted on Lennart's Mac. A disk image from `build-dmg.sh` is not notarized, so Gatekeeper blocks the first start; Patrick has to allow it under System Settings → Privacy & Security → "Open Anyway" ("Dennoch öffnen") after each new image. That stays so until we sign and notarize with an Apple Developer ID. The stable signature still spares him the repeated keychain question between our images.
+**2. Keychain: the key helper.** The certificate alone does *not* keep the keychain quiet (verified 2026-11-26 with a throwaway entry: same signer, same requirement, different build, macOS asked again). Besides its access list, a keychain entry has a partition list. Code without an Apple team ID belongs to the partition `cdhash:<hash of this build>`, so every build is a stranger. A self-chosen team ID is not a way out: macOS kills such a binary at launch (`codesign --team-identifier`, exit 137).
+
+- `scripts/adversum/keyhelper/keyhelper.c` is a tiny program that reads, writes and deletes the entry `io.adversum.kimaitray` and does nothing else. It is built and signed **once** (`keyhelper/build.sh`, cached in `/Volumes/AdversumDev/.cache/keyhelper/`) and then stays byte for byte the same, so "Always Allow" for it lasts.
+- `signing.sh` copies it into every build as `Contents/MacOS/kimaitray-keyhelper` and signs the bundle again. In the app, `src-tauri/src/adversum/keystore.rs` runs it for all token access (hooks in `keychain.rs`); the token goes through pipes, not arguments. Debug and ad-hoc builds have no helper and use the keyring crate directly, as upstream does.
+- The helper only serves a parent process that is validly signed as `io.adversum.kimaitray` with our certificate (the certificate's hash is compiled in). Started from anything else it exits with status 4.
+- **Do not edit `keyhelper.c`, its build flags or the cache without need.** Any change makes a new binary, and macOS asks once more. `build.sh` prints a warning when it builds a new one; tell Lennart before installing such a build.
+
+Dialogs only a human can answer, each once: the trust change in `setup-signing.sh` (password or Touch ID); "codesign wants to sign using key Adversum Dev" at the first build (password, **Always Allow**); the keychain question for `kimaitray-keyhelper` at the first start with a new helper (password, **Always Allow**). Tell Lennart before any step that brings one up. After that, installs are silent.
+
+- A new certificate (expired, deleted, other Mac) means a new helper and a new requirement: the keychain asks once more, and macOS forgets the microphone permission.
+- Do not read keychain access lists with `security dump-keychain -a`: it opens a dialog for every entry. `security find-generic-password -s io.adversum.kimaitray` (without `-w`/`-g`) shows the entry's attributes silently. Never read the token itself.
+- To check an install for dialogs without seeing the screen: a password or keychain dialog is a running `SecurityAgent` process (`pgrep -x SecurityAgent`).
+
+**For Patrick (any other Mac):** the certificate is self-signed and only trusted on Lennart's Mac. A disk image from `build-dmg.sh` is not notarized, so Gatekeeper blocks the first start; Patrick has to allow it under System Settings → Privacy & Security → "Open Anyway" ("Dennoch öffnen") after each new image. That stays so until we sign and notarize with an Apple Developer ID. The key helper works on his Mac too: he confirms the keychain question once ("Always Allow") and is not asked again by later images, as long as they carry the same helper.
 
 ## Environment on Lennart's Mac
 

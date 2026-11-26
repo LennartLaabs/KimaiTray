@@ -55,6 +55,10 @@ fn keyring_entry(account: &str) -> Result<keyring::Entry, String> {
 }
 
 fn save_to_keyring(account: &str, token: &str) -> Result<(), String> {
+    // ADVERSUM: signed macOS builds reach the keychain through the key helper.
+    if let Some(saved) = crate::adversum::keystore::save(account, token) {
+        return saved;
+    }
     let entry = keyring_entry(account)?;
     entry.set_password(token).map_err(|e| e.to_string())?;
     let stored = entry.get_password().map_err(|e| e.to_string())?;
@@ -65,6 +69,10 @@ fn save_to_keyring(account: &str, token: &str) -> Result<(), String> {
 }
 
 fn get_from_keyring(account: &str) -> Result<Option<String>, String> {
+    // ADVERSUM: signed macOS builds reach the keychain through the key helper.
+    if let Some(token) = crate::adversum::keystore::read(account) {
+        return token;
+    }
     let entry = keyring_entry(account)?;
     match entry.get_password() {
         Ok(token) => Ok(Some(token)),
@@ -74,6 +82,10 @@ fn get_from_keyring(account: &str) -> Result<Option<String>, String> {
 }
 
 fn delete_from_keyring(account: &str) -> Result<(), String> {
+    // ADVERSUM: signed macOS builds reach the keychain through the key helper.
+    if let Some(deleted) = crate::adversum::keystore::delete(account) {
+        return deleted;
+    }
     let entry = keyring_entry(account)?;
     match entry.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),

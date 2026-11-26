@@ -10,10 +10,10 @@
 # live in ~/Library/Application Support/io.adversum.kimaitray and in the
 # keychain, not in the app bundle.
 #
-# The build is signed with the certificate "Adversum Dev" (signing.sh), so
-# macOS recognizes every build as the same app and does not ask for the
-# keychain again. Only the copy in /Applications is ever started: a second
-# copy from the build folder would be a different app to the keychain.
+# The build is signed with the certificate "Adversum Dev" and carries the
+# key helper (signing.sh), so macOS does not ask for the keychain or the
+# microphone again after a new build. Only the copy in /Applications is ever
+# started.
 #
 # For a disk image to hand to someone else, use build-dmg.sh instead.
 set -eu
@@ -42,6 +42,7 @@ if [ "${1:-}" != "--no-build" ]; then
     npm run tauri build -- --target "$TARGET" --bundles app
 fi
 [ -d "$BUILT" ] || { echo "No build found at $BUILT" >&2; exit 1; }
+adversum_add_keyhelper "$BUILT"
 adversum_check_signature "$BUILT"
 
 echo "==> Quitting the running app"

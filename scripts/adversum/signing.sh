@@ -6,9 +6,9 @@
 # Builds are signed with the self-signed certificate "Adversum Dev" from the
 # login keychain (create it once with setup-signing.sh). Every build then has
 # the same designated requirement (bundle identifier + this certificate), so
-# macOS keeps "Always Allow" for the keychain entry with the API token and the
-# microphone permission across builds. An ad-hoc signature ("-") changes with
-# every build, and macOS asks again each time.
+# macOS keeps privacy permissions such as the microphone across builds. An
+# ad-hoc signature ("-") changes with every build. The keychain needs more
+# than that: see adversum_add_keyhelper below.
 #
 # Without the certificate (another Mac, CI) the build falls back to ad hoc.
 
@@ -23,6 +23,23 @@ else
   APPLE_SIGNING_IDENTITY="-"
 fi
 export APPLE_SIGNING_IDENTITY
+
+# Puts the key helper into an app bundle and signs the bundle again.
+#
+# The certificate alone does not keep the keychain quiet: without an Apple
+# team ID, macOS identifies a program by the hash of its code, so every new
+# build of the app would be asked for the API token again. The helper
+# (keyhelper/keyhelper.c) is built once and then stays byte for byte the
+# same; the app reads the token through it. Skipped for ad-hoc builds, which
+# the helper would not accept as its caller anyway.
+adversum_add_keyhelper() {
+  [ "$APPLE_SIGNING_IDENTITY" != "-" ] || return 0
+  helper="$(./scripts/adversum/keyhelper/build.sh)"
+  cp "$helper" "$1/Contents/MacOS/kimaitray-keyhelper"
+  codesign --force --options runtime --entitlements src-tauri/Entitlements.plist \
+    -s "$APPLE_SIGNING_IDENTITY" "$1"
+  echo "==> Key helper: $(codesign -dvvv "$1/Contents/MacOS/kimaitray-keyhelper" 2>&1 | sed -n 's/^CDHash=//p')"
+}
 
 # Prints how an app bundle is signed and fails if the signature is broken.
 adversum_check_signature() {
