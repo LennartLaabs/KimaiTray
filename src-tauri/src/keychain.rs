@@ -10,7 +10,9 @@ use crate::{legacy_settings_path, scrub_legacy_store_key};
 
 const STORE_PATH: &str = "settings.json";
 const TOKEN_PREFIX: &str = "api-token:";
-const KEYRING_SERVICE: &str = "eu.engazan.kimaitray";
+// ADVERSUM: own keychain service so the fork never reads or overwrites the
+// credentials of an upstream KimaiTray install.
+const KEYRING_SERVICE: &str = "io.adversum.kimaitray";
 const MAX_CREDENTIAL_KEY_BYTES: usize = 4 * 1024;
 const MAX_TOKEN_BYTES: usize = 64 * 1024;
 static LEGACY_CREDENTIAL_SCRUB: Mutex<()> = Mutex::new(());

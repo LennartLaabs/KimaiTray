@@ -12,6 +12,7 @@ import type {
 } from "../types";
 import { DESCRIPTION_INPUT_TARGET } from "../plugins/customInputs";
 import { migrateLegacyStore } from "../api/storeMigrations";
+import { adversumUpdaterEnabled } from "../adversum/updater";
 
 const STORE_PATH = "settings.json";
 const SETTINGS_KEY = "settings";
@@ -104,7 +105,8 @@ export const defaultSettings: AppSettings = {
   popupMonitorIndex: 0,
   popupMonitorPosition: "bottom-right",
 
-  autoUpdate: true,
+  // ADVERSUM: off by default in real builds, see src/adversum/updater.ts.
+  autoUpdate: adversumUpdaterEnabled(),
 
   issueIntegrations: {},
 };

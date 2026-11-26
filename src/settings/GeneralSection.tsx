@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { AppSettings } from "../types";
 import { checkForUpdate, installUpdate } from "../api/updater";
+import { adversumUpdaterEnabled } from "../adversum/updater";
 import i18n from "../shared/i18n";
 import { resolveLanguage, type LanguageSetting } from "../shared/i18n";
 import { Select, Toggle, buttonClass } from "./Controls";
@@ -124,7 +125,8 @@ export default function GeneralSection({ settings, update }: Props) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title={t("updateSettings.title")}>
+      {/* ADVERSUM: update settings stay hidden while the updater is off. */}
+      {adversumUpdaterEnabled() && <SettingsList title={t("updateSettings.title")}>
         <SettingsRow
           label={t("updateSettings.autoUpdate")}
           description={t("updateSettings.autoUpdateDescription")}
@@ -159,7 +161,7 @@ export default function GeneralSection({ settings, update }: Props) {
             {checking ? t("updateSettings.checking") : t("updateSettings.checkForUpdates")}
           </button>
         </SettingsRow>
-      </SettingsList>
+      </SettingsList>}
     </SettingsPage>
   );
 }

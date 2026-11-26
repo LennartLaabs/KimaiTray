@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "KimaiTray",
+  "productName": "KimaiTray Adversum",
   "version": "0.22.22",
-  "identifier": "eu.engazan.kimaitray",
+  "identifier": "io.adversum.kimaitray",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -84,7 +84,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "category": "Productivity",
     "shortDescription": "Kimai time-tracking tray companion",
     "longDescription": "KimaiTray is a system tray companion for Kimai time tracking. Start, stop, pause, and switch timers without leaving your desktop. Supports multiple connections, idle detection, tags, and 6 languages.",
@@ -124,9 +124,7 @@
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4QUMzRDIxQTI1RUU5OUEKUldTYTZWNmlJVDJzdUdQZHRpRFpJVWNKZ1pndWs1Q3dFZ29DNzlJZlFJbm1WczZBVnNyTXdKVVIK",
-      "endpoints": [
-        "https://github.com/Engazan/KimaiTray/releases/latest/download/latest.json"
-      ]
+      "endpoints": []
     }
   }
 }

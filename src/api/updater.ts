@@ -3,12 +3,15 @@ import {
   forgetPendingChangelog,
   rememberPendingChangelog,
 } from "./changelog";
+import { adversumUpdaterEnabled } from "../adversum/updater";
 
 let checkInFlight: Promise<Update | null> | null = null;
 let installInFlight: Promise<void> | null = null;
 
 /** Share updater work between the tray and settings windows. */
 export function checkForUpdate(): Promise<Update | null> {
+  // ADVERSUM: no update checks until the fork has its own signed releases.
+  if (!adversumUpdaterEnabled()) return Promise.resolve(null);
   if (!checkInFlight) {
     checkInFlight = check().finally(() => {
       checkInFlight = null;
