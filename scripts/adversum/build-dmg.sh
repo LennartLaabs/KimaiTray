@@ -16,6 +16,9 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 
 . ./scripts/adversum/signing.sh
+# Shows up in the app's log as "Adversum build <commit>".
+ADVERSUM_BUILD="$(git rev-parse --short HEAD)"
+export ADVERSUM_BUILD
 
 CI=true ./scripts/adversum/env.sh \
   npm run tauri build -- --target universal-apple-darwin

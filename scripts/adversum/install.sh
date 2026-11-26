@@ -31,6 +31,9 @@ esac
 BUILT="src-tauri/target/${TARGET}/release/bundle/macos/${APP_NAME}.app"
 
 . ./scripts/adversum/signing.sh
+# Shows up in the app's log as "Adversum build <commit>".
+ADVERSUM_BUILD="$(git rev-parse --short HEAD)"
+export ADVERSUM_BUILD
 
 if [ "${1:-}" != "--no-build" ]; then
   echo "==> Building ${APP_NAME} (${TARGET}), signing with \"${APPLE_SIGNING_IDENTITY}\""

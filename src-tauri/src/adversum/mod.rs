@@ -10,6 +10,11 @@ pub(crate) mod voice;
 
 /// Startup work of the fork, called once from `lib.rs` after upstream's setup.
 pub(crate) fn setup(app: &tauri::AppHandle) {
+    // Which fork build this is; `install.sh` passes the commit it built.
+    log::info!(
+        "Adversum build {}",
+        option_env!("ADVERSUM_BUILD").unwrap_or("dev")
+    );
     // The fork's shortcuts, also when upstream has none configured.
     shortcuts::register(app);
     // Dev builds can open the quick entry window at launch, to check its
