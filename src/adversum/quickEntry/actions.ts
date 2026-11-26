@@ -43,9 +43,29 @@ export type QuickAction =
       end: string;
       label: string;
     }
+  /** Several finished entries from one sentence, entered together. */
+  | {
+      type: "batch";
+      entries: BatchEntry[];
+      /**
+       * The running timer the entries take the place of: it ends at `end`,
+       * or goes away entirely when the entries cover all of it (`null`).
+       */
+      timer: { id: number; end: string | null } | null;
+      /** "3 Einträge (1 h 10 min)", for the confirmation. */
+      label: string;
+    }
   | { type: "command"; command: QuickCommand }
   /** Adds a line to the note of the running timer (voice: "Notiz: …"). */
   | { type: "note"; text: string };
+
+export interface BatchEntry {
+  projectId: number;
+  activityId: number;
+  description: string;
+  begin: string;
+  end: string;
+}
 
 /** The action that starts (or logs) a suggestion with the recognized time. */
 export function actionForSuggestion(

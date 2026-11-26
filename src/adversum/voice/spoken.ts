@@ -84,6 +84,7 @@ const FILLERS = new Set([
 /** Carry no meaning at the start: "starte", "weiter mit dem", "okay, an der". */
 const LEAD_INS = new Set([
   "mache", "mach", "arbeite", "sitze", "starte", "start", "starten", "beginne", "fange",
+  "erst", "zuerst",
   "fang", "timer", "neuer", "neuen", "zeit", "kommt", "weiter", "okay", "ok", "gut", "so",
   "dann", "als", "naechstes", "und", "mit", "an", "fuer", "bei", "beim", "im", "in", "am",
   "den", "die", "das", "der", "dem", "einen", "eine", "auf", "zu", "zum", "zur",

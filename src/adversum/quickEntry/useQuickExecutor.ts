@@ -12,6 +12,7 @@ import type { StartPreview } from "../../hooks/useStartTask";
 import type { StartTaskPayload } from "../../services/timerService";
 import type { ActiveTimer, RecentTask } from "../../types";
 import { logger } from "../../utils/logger";
+import { parseKimaiDate, toKimaiLocal } from "../../utils/time";
 import type { QuickAction } from "./actions";
 import type { QuickCommand } from "./commands";
 import {
@@ -19,7 +20,7 @@ import {
   saveInterruptLink,
   type InterruptLink,
 } from "./interruptLink";
-import { createFinishedEntry, reopenTimesheet } from "./quickApi";
+import { createFinishedEntry, createRunningEntry, reopenTimesheet } from "./quickApi";
 import {
   PREVIOUS_TASK_EVENT,
   QUICK_EXECUTE_EVENT,
@@ -61,12 +62,22 @@ export interface QuickExecutorOptions {
   stopActiveTimer: (target?: ActiveTimer) => void;
 }
 
+/** A running timer as it was before a batch of entries took its place. */
+interface RemovedTimer {
+  projectId: number;
+  activityId: number;
+  description: string;
+  begin: string;
+}
+
 /** What "Undo" has to do for one confirmation. */
 interface UndoPlan {
-  /** The entry the action created. */
-  deleteId: number;
+  /** The entries the action created. */
+  deleteIds: readonly number[];
   /** Entries the action stopped; they run again afterwards. */
   reopenIds: readonly number[];
+  /** A running entry the action removed; it is created again. */
+  restore?: RemovedTimer | null;
   /** Paused timer of an "in between" start; obsolete once its entry runs again. */
   discardPausedId: string | null;
 }
@@ -214,7 +225,7 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
       );
       if (!entry) return announce("failed", label);
       announce("started", label, {
-        deleteId: entry.id,
+        deleteIds: [entry.id],
         reopenIds: stopped,
         discardPausedId: null,
       });
@@ -222,10 +233,67 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
     [announce],
   );
 
+  /**
+   * Enters several finished entries at once. The running timer they describe
+   * is ended where they begin, or removed when they cover all of it. If any
+   * step fails, everything done so far is taken back.
+   */
+  const runBatch = useCallback(
+    async (action: Extract<QuickAction, { type: "batch" }>) => {
+      const current = latest.current;
+      const client = current.client!;
+      const release = acquireTimerOperation(qc, client.cacheScope);
+      if (!release) return announce("failed", action.label);
+      const created: number[] = [];
+      const running = action.timer
+        ? current.timers.find((timer) => timer.id === action.timer!.id)
+        : undefined;
+      let ended: number | null = null;
+      let removed: RemovedTimer | null = null;
+      try {
+        if (running && action.timer!.end) {
+          await updateTimesheet(client, running.id, { end: action.timer!.end });
+          ended = running.id;
+        } else if (running) {
+          await deleteTimesheet(client, running.id);
+          removed = {
+            projectId: running.projectId,
+            activityId: running.activityId,
+            description: running.description,
+            begin: toKimaiLocal(parseKimaiDate(running.beginIso)),
+          };
+        }
+        for (const entry of action.entries) {
+          created.push((await createFinishedEntry(client, entry)).id);
+        }
+      } catch (error) {
+        logger.error(`Entering several entries failed: ${String(error)}`);
+        for (const id of created) await deleteTimesheet(client, id).catch(() => undefined);
+        if (ended !== null) await reopenTimesheet(client, ended).catch(() => undefined);
+        if (removed) await createRunningEntry(client, removed).catch(() => undefined);
+        release();
+        await invalidateTimesheets(qc);
+        return announce("failed", action.label);
+      }
+      release();
+      await invalidateTimesheets(qc);
+      announce("logged", action.label, {
+        deleteIds: created,
+        reopenIds: ended === null ? [] : [ended],
+        restore: removed,
+        discardPausedId: null,
+      });
+    },
+    [announce, qc],
+  );
+
   const execute = useCallback(
     async (action: QuickAction, learned?: string) => {
       const current = latest.current;
-      const label = action.type === "start" || action.type === "log" ? action.label : "";
+      const label =
+        action.type === "start" || action.type === "log" || action.type === "batch"
+          ? action.label
+          : "";
       if (!current.client) return announce("failed", label);
       try {
         if (action.type === "command") return await runCommand(action.command);
@@ -244,10 +312,11 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
           return announce(
             "logged",
             label,
-            { deleteId: created.id, reopenIds: [], discardPausedId: null },
+            { deleteIds: [created.id], reopenIds: [], discardPausedId: null },
             learned,
           );
         }
+        if (action.type === "batch") return await runBatch(action);
 
         const stopped = current.timers.map((timer) => timer.id);
         const [running] = current.timers;
@@ -281,7 +350,7 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
           "started",
           label,
           {
-            deleteId: entry.id,
+            deleteIds: [entry.id],
             reopenIds: interrupted ? [interrupted.timesheetId] : stopped,
             discardPausedId: interrupted?.pausedId ?? null,
           },
@@ -292,7 +361,7 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
         announce("failed", label);
       }
     },
-    [announce, qc, runCommand, storeLink],
+    [announce, qc, runBatch, runCommand, storeLink],
   );
 
   const undo = useCallback(
@@ -306,7 +375,8 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
       if (!release) return announce("failed");
       let undone = false;
       try {
-        await deleteTimesheet(client, plan.deleteId);
+        for (const createdId of plan.deleteIds) await deleteTimesheet(client, createdId);
+        if (plan.restore) await createRunningEntry(client, plan.restore);
         if (plan.reopenIds.length > 0) {
           const active = new Set((await getActiveTimesheets(client)).map((entry) => entry.id));
           for (const stoppedId of plan.reopenIds) {

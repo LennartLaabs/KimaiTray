@@ -247,6 +247,35 @@ describe("QuickEntryBar", () => {
     }
   });
 
+  it("offers a review instead of suggestions when the text is several entries", () => {
+    const onMulti = vi.fn();
+    const sentence = "1 h dusw pm, danach 30 min herosmile call";
+    const { container } = renderBar({ onMulti });
+    type(sentence);
+    const offer = screen.getByRole("option", { selected: true });
+    expect(offer.textContent).toBe("2adversum.multi.offer:2");
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    // Tab has nothing to complete here.
+    key("Tab");
+    expect(input().value).toBe(sentence);
+    key("Enter");
+    expect(onMulti).toHaveBeenCalledWith(sentence, expect.objectContaining({ suspect: false }));
+    expect(onAction).not.toHaveBeenCalled();
+
+    type(sentence);
+    fireEvent.mouseMove(container.querySelector("[data-multi-offer]")!);
+    fireEvent.mouseDown(container.querySelector("[data-multi-offer]")!);
+    expect(onMulti).toHaveBeenCalledTimes(2);
+
+    // One task is suggested as always, and without a handler everything is.
+    type("dusw pm");
+    expect(container.querySelector("[data-multi-offer]")).toBeNull();
+    cleanup();
+    const plain = renderBar();
+    type(sentence);
+    expect(plain.container.querySelector("[data-multi-offer]")).toBeNull();
+  });
+
   it("runs commands and offers no Tab completion for them", () => {
     renderBar();
     type("pause");

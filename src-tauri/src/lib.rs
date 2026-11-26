@@ -262,6 +262,8 @@ pub fn run() {
             adversum::voice::adversum_voice_finish,
             adversum::voice::adversum_voice_cancel,
             adversum::voice::adversum_voice_set_vocabulary,
+            adversum::multi::adversum_multi_status,
+            adversum::multi::adversum_multi_extract,
         ])
         .setup(|app| {
             info!(

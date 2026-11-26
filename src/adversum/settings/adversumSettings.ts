@@ -38,7 +38,16 @@ export interface AdversumSettings {
   voiceInputDevice: string;
   /** Keep the last recording as WAV files for diagnosis. */
   voiceDebug: boolean;
+  /**
+   * Which language model may help to read a sentence with several entries:
+   * "auto" (on this Mac, else Claude Code), "device" (only on this Mac) or
+   * "off" (rules only).
+   */
+  multiModel: MultiModelMode;
 }
+
+export type MultiModelMode = "auto" | "device" | "off";
+export const MULTI_MODEL_MODES: readonly MultiModelMode[] = ["auto", "device", "off"];
 
 export const ADVERSUM_SETTINGS_EVENT = "adversum://settings-changed";
 
@@ -55,6 +64,7 @@ export const defaultAdversumSettings: AdversumSettings = {
   shortcutVoice: "Control+Alt+V",
   voiceInputDevice: "",
   voiceDebug: false,
+  multiModel: "auto",
 };
 
 const ALIAS_KINDS: readonly AliasKind[] = ["customers", "projects", "activities"];
@@ -138,6 +148,7 @@ export function normalizeAdversumSettings(raw: unknown): AdversumSettings {
     shortcutVoice: stringValue(value.shortcutVoice, defaultAdversumSettings.shortcutVoice, 256),
     voiceInputDevice: stringValue(value.voiceInputDevice, "", 512),
     voiceDebug: value.voiceDebug === true,
+    multiModel: MULTI_MODEL_MODES.find((mode) => mode === value.multiModel) ?? "auto",
   };
 }
 

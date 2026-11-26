@@ -30,11 +30,19 @@ const mocks = vi.hoisted(() => ({
   cancelVoice: vi.fn(),
   learnAlias: vi.fn(),
   setVoiceVocabulary: vi.fn(),
+  invoke: vi.fn(),
+  extractWithModel: vi.fn(),
+}));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+vi.mock("../multi/extract", () => ({ extractWithModel: mocks.extractWithModel }));
+vi.mock("../multi/useDayEntries", () => ({
+  useDayEntries: () => ({ busy: [], running: null, ready: true }),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, string>) =>
       options ? `${key}:${Object.values(options).join(",")}` : key,
+    i18n: { language: "de" },
   }),
 }));
 vi.mock("../../hooks/useKimaiClient", () => ({ useKimaiClient: () => mocks.kimai }));
@@ -75,6 +83,7 @@ import AdversumPopupQuick from "./AdversumPopupQuick";
 import { interruptMenuEntries, typingToQuickEntry } from "./popupBridge";
 import QuickEntryWindow from "./QuickEntryWindow";
 import {
+  MULTI_REVIEW_EVENT,
   QUICK_EXECUTE_EVENT,
   QUICK_SHOWN_EVENT,
   QUICK_TOAST_EVENT,
@@ -145,7 +154,7 @@ beforeEach(() => {
   mocks.os = "macos";
   for (const mock of [
     mocks.hideQuickWindow, mocks.showQuickToast, mocks.resizeQuickWindow, mocks.emitTo,
-    mocks.startVoice, mocks.cancelVoice, mocks.setVoiceVocabulary,
+    mocks.startVoice, mocks.cancelVoice, mocks.setVoiceVocabulary, mocks.invoke,
   ]) {
     mock.mockResolvedValue(undefined);
   }
@@ -268,6 +277,31 @@ describe("AdversumPopupQuick", () => {
     expect(upstream).toHaveBeenCalledWith("x");
   });
 
+  it("hands a sentence with several entries to the floating window for review", async () => {
+    setAdversumDisplay(display);
+    render(<AdversumPopupQuick {...options} />, { wrapper });
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    const sentence = "1 h dusw pm, danach 30 min herosmile pm";
+    fireEvent.focus(input);
+    await waitFor(() => {
+      fireEvent.change(input, { target: { value: sentence } });
+      expect(screen.getByRole("option", { selected: true }).textContent).toBe(
+        "2adversum.multi.offer:2",
+      );
+    });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mocks.executor.execute).not.toHaveBeenCalled();
+    expect(mocks.invoke).toHaveBeenCalledWith("adversum_quick_show");
+    await waitFor(() =>
+      expect(mocks.emitTo).toHaveBeenCalledWith("adversum-quick", MULTI_REVIEW_EVENT, { sentence }),
+    );
+    // A window that cannot be shown is no reason to fail loudly.
+    mocks.invoke.mockRejectedValue(new Error("no window"));
+    fireEvent.change(input, { target: { value: sentence } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await act(async () => undefined);
+  });
+
   it("starts a task in between from a context menu", () => {
     setAdversumDisplay(display);
     render(<AdversumPopupQuick {...options} />, { wrapper });
@@ -330,7 +364,7 @@ describe("AdversumPopupQuick", () => {
 describe("QuickEntryWindow", () => {
   async function renderWindow() {
     const view = render(<QuickEntryWindow />, { wrapper });
-    await waitFor(() => expect(Object.keys(windowHandlers)).toHaveLength(3));
+    await waitFor(() => expect(Object.keys(windowHandlers)).toHaveLength(4));
     return view;
   }
 
@@ -433,6 +467,119 @@ describe("QuickEntryWindow", () => {
     act(() => focusHandler({ payload: false }));
     expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("status")).toBeTruthy();
+  });
+
+  describe("several entries", () => {
+    const SEVERAL = "1 h dusw pm, danach 30 min herosmile pm";
+    /** Amounts and an order, but no task the catalog knows. */
+    const UNKNOWN = "Eine Stunde Dingsbums, danach 20 Minuten Kram";
+
+    function review(container: HTMLElement): HTMLElement | null {
+      return container.querySelector("[data-multi-review]");
+    }
+
+    it("reviews a typed sentence and sends all entries at once", async () => {
+      const { container } = await renderWindow();
+      const input = open();
+      await waitFor(() => {
+        fireEvent.change(input, { target: { value: SEVERAL } });
+        expect(container.querySelector("[data-multi-offer]")).not.toBeNull();
+      });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(container.querySelector("[data-quick-stage='multi']")).not.toBeNull();
+      expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(2);
+
+      // Neither a click elsewhere nor a confirmation from elsewhere discards it.
+      act(() => focusHandler({ payload: false }));
+      act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: started }));
+      expect(review(container)).not.toBeNull();
+      expect(mocks.hideQuickWindow).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(review(container)!, { key: "Enter" });
+      expect(mocks.emitTo).toHaveBeenCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
+        action: expect.objectContaining({
+          type: "batch",
+          entries: [
+            expect.objectContaining({ projectId: 11, activityId: 1 }),
+            expect.objectContaining({ projectId: 21, activityId: 1 }),
+          ],
+        }),
+      });
+      expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
+      expect(container.querySelector("[data-quick-stage='idle']")).not.toBeNull();
+    });
+
+    it("reviews a sentence the popup sent over, and closes with Escape", async () => {
+      const { container } = await renderWindow();
+      await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+      await act(async () => undefined);
+      act(() => windowHandlers[MULTI_REVIEW_EVENT]!({ payload: { sentence: SEVERAL } }));
+      await waitFor(() => expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(2));
+      fireEvent.keyDown(review(container)!, { key: "Escape" });
+      expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
+    });
+
+    it("puts a sentence that is one entry after all back into the bar", async () => {
+      const { container } = await renderWindow();
+      await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+      act(() => windowHandlers[MULTI_REVIEW_EVENT]!({ payload: { sentence: "dusw pm" } }));
+      await waitFor(() =>
+        expect(container.querySelector("[data-quick-stage='input']")).not.toBeNull(),
+      );
+      expect((screen.getByRole("combobox") as HTMLInputElement).value).toBe("dusw pm");
+    });
+
+    it("sends a spoken sentence with several activities to the review", async () => {
+      const { container } = await renderWindow();
+      await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+      await act(async () => undefined);
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({
+          payload: {
+            phase: "result",
+            manual: false,
+            text: "Eine Stunde DUSW Projektmanagement, danach 30 Minuten Herosmile Projektmanagement.",
+          },
+        }),
+      );
+      await waitFor(() => expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(2));
+      expect(container.querySelector("[data-voice-phase]")).toBeNull();
+    });
+
+    it("asks a model about a spoken sentence the rules cannot split, then shows the usual card", async () => {
+      mocks.extractWithModel.mockResolvedValue(null);
+      const { container } = await renderWindow();
+      await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({
+          payload: { phase: "result", manual: false, text: UNKNOWN },
+        }),
+      );
+      await waitFor(() => expect(mocks.extractWithModel).toHaveBeenCalledTimes(1));
+      // Back at the confirmation card, and it stays there.
+      await waitFor(() =>
+        expect(container.querySelector("[data-quick-stage='voice']")).not.toBeNull(),
+      );
+      await act(async () => undefined);
+      expect(container.querySelector("[data-quick-stage='voice']")).not.toBeNull();
+      expect(mocks.extractWithModel).toHaveBeenCalledTimes(1);
+    });
+
+    it("asks no model when the setting forbids it", async () => {
+      mocks.settings = {
+        settings: { ...(mocks.settings.settings as object), multiModel: "off" },
+      };
+      const { container } = await renderWindow();
+      await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({
+          payload: { phase: "result", manual: false, text: UNKNOWN },
+        }),
+      );
+      await act(async () => undefined);
+      expect(container.querySelector("[data-quick-stage='voice']")).not.toBeNull();
+      expect(mocks.extractWithModel).not.toHaveBeenCalled();
+    });
   });
 
   describe("voice input", () => {

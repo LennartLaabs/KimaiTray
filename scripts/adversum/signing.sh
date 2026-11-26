@@ -36,6 +36,14 @@ adversum_add_keyhelper() {
   [ "$APPLE_SIGNING_IDENTITY" != "-" ] || return 0
   helper="$(./scripts/adversum/keyhelper/build.sh)"
   cp "$helper" "$1/Contents/MacOS/kimaitray-keyhelper"
+  # The helper for Apple's on-device language model, where it can be built.
+  extract="$(./scripts/adversum/extract/build.sh)"
+  if [ -n "$extract" ]; then
+    cp "$extract" "$1/Contents/MacOS/kimaitray-extract"
+    codesign --force --options runtime -s "$APPLE_SIGNING_IDENTITY" \
+      "$1/Contents/MacOS/kimaitray-extract"
+    echo "==> On-device language model helper added"
+  fi
   codesign --force --options runtime --entitlements src-tauri/Entitlements.plist \
     -s "$APPLE_SIGNING_IDENTITY" "$1"
   echo "==> Key helper: $(codesign -dvvv "$1/Contents/MacOS/kimaitray-keyhelper" 2>&1 | sed -n 's/^CDHash=//p')"

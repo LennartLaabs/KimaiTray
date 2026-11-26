@@ -6,6 +6,8 @@ import { useKimaiClient } from "../../hooks/useKimaiClient";
 import { useLanguageSync } from "../../hooks/useLanguageSync";
 import { currentPlatform } from "../../platform";
 import { logger } from "../../utils/logger";
+import { readMulti, type MultiReading } from "../multi/draft";
+import MultiStage from "../multi/MultiStage";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
 import { aliasesToLearn, type LearnedAlias } from "../voice/learn";
 import { learnAlias, startVoice, VOICE_STATE_EVENT, type VoiceState } from "../voice/voiceApi";
@@ -15,12 +17,14 @@ import { combinationKey } from "./catalog";
 import { hideQuickWindow, resizeQuickWindow, showQuickToast } from "./quickApi";
 import QuickEntryBar from "./QuickEntryBar";
 import {
+  MULTI_REVIEW_EVENT,
   QUICK_EXECUTE_EVENT,
   QUICK_SHOWN_EVENT,
   QUICK_TOAST_EVENT,
   QUICK_UNDO_EVENT,
   TOAST_DURATION_MS,
   TRAY_WINDOW_LABEL,
+  type MultiReviewRequest,
   type QuickToastData,
 } from "./quickEvents";
 import QuickToast from "./QuickToast";
@@ -35,7 +39,9 @@ type Stage =
   /** The confirmation of the last quick action, at the bottom of the screen. */
   | { name: "toast"; toast: QuickToastData }
   /** Voice input: recording, transcribing, then the confirmation card. */
-  | { name: "voice"; state: VoiceState };
+  | { name: "voice"; state: VoiceState }
+  /** Several entries from one sentence, typed or spoken, under review. */
+  | { name: "multi"; sentence: string; reading: MultiReading | null; spoken: boolean };
 
 function report(error: unknown): void {
   logger.error(`Quick entry window: ${String(error)}`);
@@ -53,6 +59,9 @@ function report(error: unknown): void {
  * - **voice input** in the bar's place: the native side records and
  *   transcribes, this window shows the progress and then asks for
  *   confirmation of what it understood.
+ * - the **review of several entries** when a typed or spoken sentence names
+ *   more than one activity (`multi/`). It stays until it is confirmed or
+ *   dismissed; clicking elsewhere does not discard what was edited there.
  */
 export default function QuickEntryWindow() {
   const { t } = useTranslation();
@@ -71,6 +80,8 @@ export default function QuickEntryWindow() {
   const voiceOrigin = useRef<VoiceOrigin | null>(null);
   const stageRef = useRef(stage);
   stageRef.current = stage;
+  /** A spoken sentence the review handed back as a single entry. */
+  const singleRef = useRef("");
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,10 +95,15 @@ export default function QuickEntryWindow() {
       currentWindow.listen<QuickToastData>(QUICK_TOAST_EVENT, ({ payload }) => {
         // An open bar or voice input is not replaced; the user is busy there.
         const { name } = stageRef.current;
-        if (name !== "input" && name !== "voice") setStage({ name: "toast", toast: payload });
+        if (name !== "input" && name !== "voice" && name !== "multi") {
+          setStage({ name: "toast", toast: payload });
+        }
       }),
       currentWindow.listen<VoiceState>(VOICE_STATE_EVENT, ({ payload }) => {
         setStage({ name: "voice", state: payload });
+      }),
+      currentWindow.listen<MultiReviewRequest>(MULTI_REVIEW_EVENT, ({ payload }) => {
+        setStage({ name: "multi", sentence: payload.sentence, reading: null, spoken: false });
       }),
       currentWindow.onFocusChanged(({ payload: hasFocus }) => {
         // Clicking elsewhere closes the bar and voice input (hiding the
@@ -166,6 +182,19 @@ export default function QuickEntryWindow() {
     );
   };
 
+  // A spoken sentence with several activities goes to the review instead of
+  // the confirmation card.
+  const spokenText =
+    stage.name === "voice" && stage.state.phase === "result" ? (stage.state.text ?? "") : "";
+  useEffect(() => {
+    if (!spokenText || singleRef.current === spokenText) return;
+    const reading = readMulti(spokenText, catalog, history, new Date());
+    const model = settings.multiModel !== "off";
+    if (reading.draft || (reading.suspect && model)) {
+      setStage({ name: "multi", sentence: spokenText, reading, spoken: true });
+    }
+  }, [spokenText, catalog, history, settings.multiModel]);
+
   const edit = useCallback((text: string, origin: VoiceOrigin) => {
     voiceOrigin.current = origin;
     setStage({ name: "input" });
@@ -191,6 +220,31 @@ export default function QuickEntryWindow() {
               <p className="px-4 py-3.5 text-[15px] text-gray-500 dark:text-gray-400">
                 {t("adversum.quick.notConnected")}
               </p>
+            ) : stage.name === "multi" ? (
+              <MultiStage
+                key={stage.sentence}
+                sentence={stage.sentence}
+                reading={stage.reading ?? readMulti(stage.sentence, catalog, history, new Date())}
+                catalog={catalog}
+                history={history}
+                client={client}
+                useModel={settings.multiModel !== "off"}
+                onSubmit={send}
+                onClose={close}
+                onSingle={() => {
+                  // One entry after all: the card for speech, the bar for typing.
+                  singleRef.current = stage.sentence;
+                  if (stage.spoken) {
+                    setStage({
+                      name: "voice",
+                      state: { phase: "result", manual: false, text: stage.sentence },
+                    });
+                  } else {
+                    setStage({ name: "input" });
+                    setFocus((current) => ({ request: current.request + 1, text: stage.sentence }));
+                  }
+                }}
+              />
             ) : stage.name === "voice" ? (
               <VoiceStage
                 state={stage.state}
@@ -209,6 +263,9 @@ export default function QuickEntryWindow() {
                 seedText={focus.text}
                 onAction={sendTyped}
                 onClose={close}
+                onMulti={(sentence, reading) =>
+                  setStage({ name: "multi", sentence, reading, spoken: false })
+                }
                 onVoice={
                   settings.voiceEnabled ? () => void startVoice().catch(report) : undefined
                 }

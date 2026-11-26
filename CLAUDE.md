@@ -29,6 +29,14 @@ Build a disk image only when Lennart asks for one for someone else (Patrick): `.
 
 **Never start the app from the build folder or with `npm run tauri dev` while Lennart uses the installed one**, and never leave such an instance running. If a native check needs a dev instance, tell him first, use `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, and quit it when done. `install.sh` quits every copy and warns if one outside `/Applications` is still running. Debug builds use the keychain service `io.adversum.kimaitray.dev`, so they cannot touch the real API token.
 
+## Language models for several entries
+
+A sentence with several activities is read by rules (`src/adversum/multi/`). Only where they are unsure, a model may extract the activities; it never calculates. See "Several entries from one sentence" in `src/adversum/README.md`.
+
+- Apple's on-device model needs the helper `scripts/adversum/extract/extract.swift`. It only builds with the macOS 26 SDK ("Command Line Tools for Xcode 26" from Software Update, or Xcode 26); `install.sh` skips it otherwise and says so. On Lennart's Mac (2026-11-26) the SDK was 15.5 and Apple Intelligence was not switched on, so the helper has never been compiled or run. Treat it as untested until it has been.
+- The fallback is `claude -p` with the user's Claude Code subscription, never an API key. It sends the sentence to Anthropic, so the setting `multiModel` can restrict help to the Mac or switch it off. The command line must be logged in (`claude`, then `/login`); on 2026-11-26 it was not.
+- Do not run `claude -p` in tests or scripts with real customer data.
+
 ## Code signing and the keychain
 
 Two separate mechanisms decide whether macOS asks again after a new build. Both are handled by the scripts; do not "simplify" either away.

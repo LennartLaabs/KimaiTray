@@ -20,6 +20,7 @@ import type { QuickSuggestion } from "./parse";
 import { interruptMenuEntries, registerPopupQuick, typingToQuickEntry } from "./popupBridge";
 import {
   createFinishedEntry,
+  createRunningEntry,
   fetchHistory,
   hideQuickWindow,
   reopenTimesheet,
@@ -258,6 +259,28 @@ describe("createFinishedEntry", () => {
   it("rejects a response that is not a time entry", async () => {
     const client = { post: vi.fn().mockResolvedValue({ ok: true }) } as unknown as KimaiClient;
     await expect(createFinishedEntry(client, { ...entry, description: "" })).rejects.toThrow(
+      "Kimai returned an invalid time entry",
+    );
+  });
+});
+
+describe("createRunningEntry", () => {
+  const entry = { projectId: 11, activityId: 1, begin: "2026-11-26T09:00:00" };
+
+  it("posts an entry without an end, so it runs", async () => {
+    const post = vi.fn().mockResolvedValue(timesheet(78, { end: null, duration: null }));
+    const client = { post } as unknown as KimaiClient;
+    await expect(createRunningEntry(client, { ...entry, description: "Call" })).resolves.toMatchObject({ id: 78 });
+    expect(post).toHaveBeenCalledWith("/api/timesheets", {
+      project: 11,
+      activity: 1,
+      begin: "2026-11-26T09:00:00",
+      description: "Call",
+    });
+    await createRunningEntry(client, { ...entry, description: "" });
+    expect(post.mock.lastCall![1]).not.toHaveProperty("description");
+    post.mockResolvedValue({ ok: true });
+    await expect(createRunningEntry(client, { ...entry, description: "" })).rejects.toThrow(
       "Kimai returned an invalid time entry",
     );
   });

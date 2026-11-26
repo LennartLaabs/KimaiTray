@@ -18,6 +18,13 @@ export const QUICK_UNDO_LATEST_EVENT = "adversum://quick-undo-latest";
 /** Native side → tray window: the "previous task" shortcut was pressed. */
 export const PREVIOUS_TASK_EVENT = "adversum://previous-task";
 
+/** Tray window → quick window: review this sentence as several entries. */
+export const MULTI_REVIEW_EVENT = "adversum://multi-review";
+
+export interface MultiReviewRequest {
+  sentence: string;
+}
+
 export interface QuickExecuteRequest {
   action: QuickAction;
   /** Shown with the confirmation: what voice input learned from a correction. */

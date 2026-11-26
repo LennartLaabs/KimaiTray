@@ -42,6 +42,7 @@ describe("normalizeAdversumSettings", () => {
         shortcutVoice: "Alt+F5",
         voiceInputDevice: "coreaudio:usb",
         voiceDebug: true,
+        multiModel: "device",
       }),
     ).toEqual({
       customerIndicator: "dots",
@@ -56,6 +57,7 @@ describe("normalizeAdversumSettings", () => {
       shortcutVoice: "Alt+F5",
       voiceInputDevice: "coreaudio:usb",
       voiceDebug: true,
+      multiModel: "device",
     });
     expect(
       normalizeAdversumSettings({
@@ -70,6 +72,7 @@ describe("normalizeAdversumSettings", () => {
         shortcutVoice: null,
         voiceInputDevice: "x".repeat(513),
         voiceDebug: 1,
+        multiModel: "cloud",
       }),
     ).toEqual(defaultAdversumSettings);
     expect(defaultAdversumSettings).toMatchObject({

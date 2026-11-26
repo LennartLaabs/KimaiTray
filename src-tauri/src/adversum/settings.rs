@@ -16,7 +16,7 @@ const STORE_PATH: &str = "adversum.json";
 const SETTINGS_KEY: &str = "settings";
 const MAX_SETTINGS_BYTES: usize = 512 * 1024;
 const CHANGED_EVENT: &str = "adversum://settings-changed";
-const SETTINGS_KEYS: [&str; 12] = [
+const SETTINGS_KEYS: [&str; 13] = [
     "customerIndicator",
     "logoDevToken",
     "shortcutQuickEntry",
@@ -29,6 +29,7 @@ const SETTINGS_KEYS: [&str; 12] = [
     "shortcutVoice",
     "voiceInputDevice",
     "voiceDebug",
+    "multiModel",
 ];
 const WRITER_WINDOWS: [&str; 1] = ["settings"];
 /// Windows that confirm quick actions may add aliases they learned, and
@@ -84,6 +85,11 @@ fn validate_voice(values: &Map<String, Value>) -> Result<(), String> {
     if let Some(model) = values.get(models::MODEL_KEY) {
         if model.as_str().and_then(models::spec).is_none() {
             return Err("Unknown speech model".into());
+        }
+    }
+    if let Some(mode) = values.get(super::multi::MODE_KEY) {
+        if !mode.as_str().is_some_and(super::multi::valid_mode) {
+            return Err("Invalid language model setting".into());
         }
     }
     if let Some(device) = values.get("voiceInputDevice") {
@@ -255,7 +261,7 @@ mod tests {
         let mut settings = Map::new();
         let ok = json!({"voiceEnabled": true, "voiceModel": "base", "voiceModelDir": "",
             "voiceTapMode": false, "shortcutVoice": "Control+Alt+V",
-            "voiceInputDevice": "coreaudio:abc", "voiceDebug": true});
+            "voiceInputDevice": "coreaudio:abc", "voiceDebug": true, "multiModel": "device"});
         apply_patch(&mut settings, object(ok)).unwrap();
         assert_eq!(settings["voiceModel"], "base");
         for bad in [
@@ -268,6 +274,8 @@ mod tests {
             json!({"voiceDebug": "on"}),
             json!({"voiceInputDevice": 3}),
             json!({"voiceInputDevice": "x".repeat(513)}),
+            json!({"multiModel": "cloud"}),
+            json!({"multiModel": true}),
         ] {
             assert!(apply_patch(&mut settings, object(bad)).is_err());
         }

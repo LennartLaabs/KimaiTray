@@ -343,6 +343,14 @@ const commands: Record<string, (args: Args) => unknown> = {
       debugDir: "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/voice-debug",
     };
   },
+  // Several entries from one sentence: no language model in the browser,
+  // so the rules alone decide, as on a Mac without Apple Intelligence.
+  adversum_multi_status: () => ({
+    mode: readStore().adversum?.multiModel ?? "auto",
+    apple: "missing",
+    claude: false,
+  }),
+  adversum_multi_extract: () => null,
   adversum_voice_devices: () => [
     { id: "coreaudio:usb", name: "Trust USB microphone", isDefault: true },
     { id: "coreaudio:teams", name: "Microsoft Teams Audio", isDefault: false },

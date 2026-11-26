@@ -92,6 +92,24 @@ export async function createFinishedEntry(
 }
 
 /**
+ * Starts a running entry with a begin in the past, without stopping others:
+ * it brings back a timer that a batch of entries had replaced.
+ */
+export async function createRunningEntry(
+  client: KimaiClient,
+  entry: Omit<FinishedEntry, "end">,
+): Promise<KimaiTimesheetEntry> {
+  const created = await client.post<unknown>("/api/timesheets", {
+    project: entry.projectId,
+    activity: entry.activityId,
+    begin: entry.begin,
+    ...(entry.description ? { description: entry.description } : {}),
+  });
+  if (!isKimaiTimesheet(created)) throw new Error("Kimai returned an invalid time entry");
+  return created;
+}
+
+/**
  * Lets a stopped entry run again, for "undo". First choice is to clear the
  * entry's end, so it continues as if it had never been stopped. Where Kimai
  * does not accept that, the entry is restarted as a new one, the way

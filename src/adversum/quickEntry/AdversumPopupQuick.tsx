@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { emitTo } from "@tauri-apps/api/event";
 import { useAdversumDisplay } from "../display/displayStore";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
 import { buildVocabulary } from "../voice/vocabulary";
 import { setVoiceVocabulary, startVoice } from "../voice/voiceApi";
 import { registerPopupQuick, type BridgeTask } from "./popupBridge";
+import { MULTI_REVIEW_EVENT, QUICK_WINDOW_LABEL } from "./quickEvents";
 import QuickEntryBar from "./QuickEntryBar";
 import { useQuickEntryData } from "./useQuickEntryData";
 import { useQuickExecutor, type QuickExecutorOptions } from "./useQuickExecutor";
@@ -88,6 +91,13 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
       onClose={() => (document.activeElement as HTMLElement | null)?.blur()}
       onVoice={
         settings.voiceEnabled ? () => void startVoice().catch(() => undefined) : undefined
+      }
+      // The review needs more room than the popup has: it opens in the
+      // floating window.
+      onMulti={(sentence) =>
+        void invoke("adversum_quick_show")
+          .then(() => emitTo(QUICK_WINDOW_LABEL, MULTI_REVIEW_EVENT, { sentence }))
+          .catch(() => undefined)
       }
     />
   );

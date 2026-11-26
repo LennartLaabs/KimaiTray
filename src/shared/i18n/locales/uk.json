@@ -873,7 +873,23 @@
       "aliasPlaceholder": "word, word",
       "aliasesFor": "Aliases for {{name}}",
       "noConnection": "Connect to Kimai to manage aliases.",
-      "noEntries": "Nothing found."
+      "noEntries": "Nothing found.",
+      "multiModel": "Language model for several entries",
+      "multiModelDescription": "When a sentence names several activities, fixed rules take it apart. Only where they are unsure may a language model read out the activities; all arithmetic stays in the app. \"Automatic\" uses Apple Intelligence on this Mac and otherwise Claude Code with your subscription, which sends the sentence to Anthropic. \"Only on this Mac\" sends nothing.",
+      "multiModelMode": {
+        "auto": "Automatic",
+        "device": "Only on this Mac",
+        "off": "Off"
+      },
+      "multiModelApple": {
+        "available": "Apple Intelligence: ready",
+        "missing": "Apple Intelligence: helper missing in this build",
+        "unavailable": "Apple Intelligence: not available ({{reason}})"
+      },
+      "multiModelClaude": {
+        "found": "Claude Code: found",
+        "missing": "Claude Code: not installed"
+      }
     },
     "reminder": {
       "title": "Start right away"
@@ -973,6 +989,62 @@
         "speech": "Noise floor {{floor}} · speech level {{level}} · gain ×{{gain}}",
         "saved": "Recording: {{path}}"
       }
+    },
+    "multi": {
+      "title": "Review and enter · {{count}}",
+      "offer": "Several entries found ({{count}}) · ↵ review",
+      "source": {
+        "apple": "read with Apple Intelligence",
+        "claude": "read with Claude Code"
+      },
+      "refining": "reading more closely …",
+      "loading": "Loading the day's entries …",
+      "question": {
+        "count": "How often?",
+        "each": "How many minutes each?",
+        "duration": "How many minutes?",
+        "rest": "Rest of what? How many minutes?"
+      },
+      "leaveOut": "Leave out",
+      "include": "Enter",
+      "break": "Break (no entry)",
+      "noTask": "Choose a task",
+      "task": "Task",
+      "begin": "Begin",
+      "end": "End",
+      "noteField": "Note",
+      "inherited": "Customer as before",
+      "guessed": "Task assumed",
+      "note": {
+        "vague": "\"kurz\" taken as 5 min",
+        "forcedAdditional": "Interruption as long as the activity: added on top",
+        "busy": "placed around an existing entry",
+        "future": "lies in the future",
+        "noRest": "no time left for the rest",
+        "overWindow": "longer than the time window",
+        "defaultStart": "no clock time: starts at 9:00"
+      },
+      "within": {
+        "included": "Interruption out of the time · total stays",
+        "additional": "Interruption on top",
+        "toAdditional": "on top",
+        "toIncluded": "out of the time",
+        "toMerged": "merge",
+        "toSplit": "split"
+      },
+      "timer": {
+        "unknown": "running timer",
+        "cut": "Running timer {{label}} ends at {{time}}",
+        "replaced": "Running timer {{label}} is replaced by the entries",
+        "kept": "Running timer {{label}} stays, entries lie before it",
+        "toKeep": "Keep timer",
+        "toAdjust": "Adjust timer"
+      },
+      "total": "Total {{duration}}",
+      "hint": "↵ enter · esc discard · ⇥ to change",
+      "hintQuestions": "Answer the yellow questions first, or leave them out",
+      "submit": "Enter",
+      "toastLabel": "{{count}}× ({{duration}})"
     }
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { readMulti, type MultiReading } from "../multi/draft";
 import MicIcon from "../voice/MicIcon";
 import { actionForSuggestion, type QuickAction, type QuickStartMode } from "./actions";
 import type { QuickCatalog } from "./catalog";
@@ -22,7 +23,14 @@ interface QuickEntryBarProps {
   onClose: () => void;
   /** Shows a microphone button that starts voice input. */
   onVoice?: () => void;
+  /**
+   * The text is several entries ("1 h dusw design, dazwischen 10 min kk
+   * call"): the bar offers to review them instead of suggesting one task.
+   */
+  onMulti?: (sentence: string, reading: MultiReading) => void;
 }
+
+const NO_SUGGESTIONS: QuickSuggestion[] = [];
 
 /** The text that names a suggestion unambiguously, for Tab completion. */
 export function completionText(suggestion: QuickSuggestion, timePhrase: string): string {
@@ -40,6 +48,7 @@ export default function QuickEntryBar({
   onAction,
   onClose,
   onVoice,
+  onMulti,
 }: QuickEntryBarProps) {
   const { t } = useTranslation();
   const listId = useId();
@@ -52,11 +61,19 @@ export default function QuickEntryBar({
     () => parseQuickEntry(text, catalog, history, new Date()),
     [text, catalog, history],
   );
-  const { suggestions, command } = result;
+  const multi = useMemo(
+    () => (onMulti ? readMulti(text, catalog, history, new Date()) : null),
+    // Whether the handler exists matters, not which function it is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [text, catalog, history, !onMulti],
+  );
+  const several = multi?.draft ? multi.draft.items.filter((item) => !item.gap).length : 0;
+  const command = several > 0 ? null : result.command;
+  const suggestions = several > 0 ? NO_SUGGESTIONS : result.suggestions;
 
   useEffect(() => {
-    setSelected(result.autoSelect ? 0 : -1);
-  }, [result]);
+    setSelected(result.autoSelect || several > 0 ? 0 : -1);
+  }, [result, several]);
 
   useEffect(() => {
     if (focusRequest === 0) return;
@@ -67,11 +84,13 @@ export default function QuickEntryBar({
   }, [focusRequest]);
 
   const open = variant === "window" || (focused && text.trim() !== "");
-  const rowCount = command ? 1 : suggestions.length;
+  const rowCount = command || several > 0 ? 1 : suggestions.length;
 
   const submit = (index: number, mode: QuickStartMode) => {
     if (disabled) return;
-    if (command) {
+    if (several > 0) {
+      onMulti!(text, multi!);
+    } else if (command) {
       onAction({ type: "command", command });
     } else {
       const suggestion = suggestions[index];
@@ -178,7 +197,21 @@ export default function QuickEntryBar({
               : "absolute inset-x-0 top-full mt-1 rounded-lg border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-[#232323]"
           }
         >
-          {command ? (
+          {several > 0 ? (
+            <QuickRow
+              id={`${listId}-0`}
+              selected={selected === 0}
+              onSelect={() => setSelected(0)}
+              onRun={() => submit(0, "switch")}
+            >
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-light)] text-[11px] font-semibold text-[var(--accent)]">
+                {several}
+              </span>
+              <span data-multi-offer className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                {t("adversum.multi.offer", { count: several })}
+              </span>
+            </QuickRow>
+          ) : command ? (
             <QuickRow
               id={`${listId}-0`}
               selected={selected === 0}

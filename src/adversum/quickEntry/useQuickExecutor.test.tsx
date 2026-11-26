@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getActiveTimesheets: vi.fn(),
   updateTimesheet: vi.fn(),
   createFinishedEntry: vi.fn(),
+  createRunningEntry: vi.fn(),
   reopenTimesheet: vi.fn(),
   invalidateTimesheets: vi.fn(),
   acquire: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("../../api/timesheetApi", () => ({
 }));
 vi.mock("./quickApi", () => ({
   createFinishedEntry: mocks.createFinishedEntry,
+  createRunningEntry: mocks.createRunningEntry,
   reopenTimesheet: mocks.reopenTimesheet,
 }));
 vi.mock("../../hooks/invalidateTimesheets", () => ({
@@ -111,6 +113,7 @@ beforeEach(() => {
   mocks.getActiveTimesheets.mockResolvedValue([]);
   mocks.updateTimesheet.mockResolvedValue({});
   mocks.reopenTimesheet.mockResolvedValue({});
+  mocks.createRunningEntry.mockResolvedValue({ id: 500 });
   options = {
     client,
     connectionId: "conn",
@@ -239,6 +242,129 @@ describe("undo", () => {
     await act(() => result.current.undo(1));
     expect(mocks.deleteTimesheet).toHaveBeenCalledWith(client, 321);
     expect(mocks.getActiveTimesheets).not.toHaveBeenCalled();
+  });
+});
+
+describe("several entries at once", () => {
+  const entry = (begin: string, end: string, projectId = 11) => ({
+    projectId,
+    activityId: 4,
+    description: "",
+    begin: `2026-11-26T${begin}:00`,
+    end: `2026-11-26T${end}:00`,
+  });
+  const batch = (timer: { id: number; end: string | null } | null): QuickAction => ({
+    type: "batch",
+    entries: [entry("13:20", "13:45"), entry("13:45", "13:55", 31), entry("13:55", "14:20")],
+    timer,
+    label: "3× (1 h)",
+  });
+  const running: ActiveTimer = {
+    ...timer(7),
+    description: "Startseite",
+    beginIso: "2026-11-26T13:00:00+0100",
+  };
+
+  beforeEach(() => {
+    let id = 100;
+    mocks.createFinishedEntry.mockImplementation(async () => ({ id: ++id }));
+  });
+
+  it("enters them all and takes them all back with one undo", async () => {
+    const { result } = setup();
+    await act(() => result.current.execute(batch(null)));
+    expect(mocks.createFinishedEntry).toHaveBeenCalledTimes(3);
+    expect(mocks.createFinishedEntry).toHaveBeenNthCalledWith(2, client, entry("13:45", "13:55", 31));
+    expect(mocks.updateTimesheet).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(result.current.toast).toMatchObject({ kind: "logged", label: "3× (1 h)", undoable: true });
+
+    await act(() => result.current.undo(result.current.toast!.id));
+    expect(mocks.deleteTimesheet.mock.calls.map(([, id]) => id)).toEqual([101, 102, 103]);
+    expect(mocks.createRunningEntry).not.toHaveBeenCalled();
+    expect(result.current.toast).toMatchObject({ kind: "undone" });
+  });
+
+  it("ends the running timer where the entries begin, and lets it run again on undo", async () => {
+    const { result } = setup({ timers: [running] });
+    await act(() => result.current.execute(batch({ id: 7, end: "2026-11-26T13:20:00" })));
+    expect(mocks.updateTimesheet).toHaveBeenCalledWith(client, 7, { end: "2026-11-26T13:20:00" });
+    expect(mocks.deleteTimesheet).not.toHaveBeenCalled();
+    // The timer is ended before the first entry is written.
+    expect(mocks.updateTimesheet.mock.invocationCallOrder[0]!).toBeLessThan(
+      mocks.createFinishedEntry.mock.invocationCallOrder[0]!,
+    );
+
+    await act(() => result.current.undo(result.current.toast!.id));
+    expect(mocks.reopenTimesheet).toHaveBeenCalledWith(client, 7);
+  });
+
+  it("removes a timer the entries cover entirely, and brings it back on undo", async () => {
+    const { result } = setup({ timers: [running] });
+    await act(() => result.current.execute(batch({ id: 7, end: null })));
+    expect(mocks.deleteTimesheet).toHaveBeenCalledWith(client, 7);
+    expect(mocks.updateTimesheet).not.toHaveBeenCalled();
+
+    await act(() => result.current.undo(result.current.toast!.id));
+    expect(mocks.createRunningEntry).toHaveBeenCalledWith(client, {
+      projectId: 11,
+      activityId: 1,
+      description: "Startseite",
+      begin: "2026-11-26T13:00:00",
+    });
+    expect(mocks.reopenTimesheet).not.toHaveBeenCalled();
+  });
+
+  it("leaves a timer alone that has stopped meanwhile", async () => {
+    const { result } = setup({ timers: [] });
+    await act(() => result.current.execute(batch({ id: 7, end: null })));
+    expect(mocks.deleteTimesheet).not.toHaveBeenCalled();
+    expect(mocks.createFinishedEntry).toHaveBeenCalledTimes(3);
+  });
+
+  it("takes everything back when one entry fails", async () => {
+    mocks.createFinishedEntry
+      .mockResolvedValueOnce({ id: 201 })
+      .mockRejectedValueOnce(new Error("overlap"));
+    const cut = setup({ timers: [running] });
+    await act(() => cut.result.current.execute(batch({ id: 7, end: "2026-11-26T13:20:00" })));
+    expect(mocks.deleteTimesheet).toHaveBeenCalledWith(client, 201);
+    expect(mocks.reopenTimesheet).toHaveBeenCalledWith(client, 7);
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(cut.result.current.toast).toMatchObject({ kind: "failed", undoable: false });
+    expect(mocks.loggerError).toHaveBeenCalledWith(expect.stringContaining("overlap"));
+
+    // A removed timer comes back; a failing clean-up does not stop the rest.
+    cut.unmount();
+    vi.clearAllMocks();
+    mocks.acquire.mockReturnValue(mocks.release);
+    mocks.createFinishedEntry
+      .mockResolvedValueOnce({ id: 301 })
+      .mockRejectedValueOnce(new Error("offline"));
+    mocks.deleteTimesheet.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("gone"));
+    mocks.createRunningEntry.mockRejectedValue(new Error("offline"));
+    const removed = setup({ timers: [running] });
+    await act(() => removed.result.current.execute(batch({ id: 7, end: null })));
+    expect(mocks.createRunningEntry).toHaveBeenCalledTimes(1);
+    expect(removed.result.current.toast).toMatchObject({ kind: "failed" });
+
+    // The clean-up after an ended timer may fail as well.
+    removed.unmount();
+    vi.clearAllMocks();
+    mocks.acquire.mockReturnValue(mocks.release);
+    mocks.createFinishedEntry.mockRejectedValue(new Error("offline"));
+    mocks.reopenTimesheet.mockRejectedValue(new Error("offline"));
+    const stuck = setup({ timers: [running] });
+    await act(() => stuck.result.current.execute(batch({ id: 7, end: "2026-11-26T13:20:00" })));
+    expect(stuck.result.current.toast).toMatchObject({ kind: "failed" });
+  });
+
+  it("does nothing while another timer operation runs", async () => {
+    mocks.acquire.mockReturnValue(null);
+    const { result } = setup();
+    await act(() => result.current.execute(batch(null)));
+    expect(mocks.createFinishedEntry).not.toHaveBeenCalled();
+    expect(result.current.toast).toMatchObject({ kind: "failed", label: "3× (1 h)" });
   });
 });
 

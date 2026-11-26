@@ -873,7 +873,23 @@
       "aliasPlaceholder": "Wort, Wort",
       "aliasesFor": "Aliasse für {{name}}",
       "noConnection": "Mit Kimai verbinden, um Aliasse zu pflegen.",
-      "noEntries": "Nichts gefunden."
+      "noEntries": "Nichts gefunden.",
+      "multiModel": "Sprachmodell für mehrere Einträge",
+      "multiModelDescription": "Nennt ein Satz mehrere Tätigkeiten, zerlegen ihn feste Regeln. Nur wo die unsicher sind, darf ein Sprachmodell die Tätigkeiten herauslesen; gerechnet wird immer in der App. „Automatisch“ nutzt Apple Intelligence auf diesem Mac und sonst Claude Code mit deinem Abo, dabei geht der Satz an Anthropic. „Nur auf diesem Mac“ schickt nichts weg.",
+      "multiModelMode": {
+        "auto": "Automatisch",
+        "device": "Nur auf diesem Mac",
+        "off": "Aus"
+      },
+      "multiModelApple": {
+        "available": "Apple Intelligence: bereit",
+        "missing": "Apple Intelligence: Helfer fehlt in diesem Build",
+        "unavailable": "Apple Intelligence: nicht verfügbar ({{reason}})"
+      },
+      "multiModelClaude": {
+        "found": "Claude Code: gefunden",
+        "missing": "Claude Code: nicht installiert"
+      }
     },
     "reminder": {
       "title": "Direkt starten"
@@ -973,6 +989,62 @@
         "speech": "Grundrauschen {{floor}} · Sprachpegel {{level}} · Verstärkung ×{{gain}}",
         "saved": "Aufnahme: {{path}}"
       }
+    },
+    "multi": {
+      "title": "Prüfen und eintragen · {{count}}",
+      "offer": "Mehrere Einträge erkannt ({{count}}) · ↵ prüfen",
+      "source": {
+        "apple": "mit Apple Intelligence gelesen",
+        "claude": "mit Claude Code gelesen"
+      },
+      "refining": "wird genauer gelesen …",
+      "loading": "Einträge des Tages werden geladen …",
+      "question": {
+        "count": "Wie oft?",
+        "each": "Wie viele Minuten jeweils?",
+        "duration": "Wie viele Minuten?",
+        "rest": "Rest wovon? Wie viele Minuten?"
+      },
+      "leaveOut": "Weglassen",
+      "include": "Eintragen",
+      "break": "Pause (kein Eintrag)",
+      "noTask": "Aufgabe wählen",
+      "task": "Aufgabe",
+      "begin": "Beginn",
+      "end": "Ende",
+      "noteField": "Notiz",
+      "inherited": "Kunde wie zuvor",
+      "guessed": "Aufgabe angenommen",
+      "note": {
+        "vague": "„kurz“ als 5 min angenommen",
+        "forcedAdditional": "Unterbrechung so lang wie die Tätigkeit: kommt obendrauf",
+        "busy": "um bestehenden Eintrag herum gelegt",
+        "future": "liegt in der Zukunft",
+        "noRest": "für „Rest“ bleibt keine Zeit",
+        "overWindow": "länger als das Zeitfenster",
+        "defaultStart": "ohne Uhrzeit: beginnt um 9:00"
+      },
+      "within": {
+        "included": "Unterbrechung aus der Zeit · Summe bleibt",
+        "additional": "Unterbrechung kommt obendrauf",
+        "toAdditional": "zusätzlich",
+        "toIncluded": "aus der Zeit",
+        "toMerged": "zusammenfassen",
+        "toSplit": "teilen"
+      },
+      "timer": {
+        "unknown": "laufender Timer",
+        "cut": "Laufender Timer {{label}} endet um {{time}}",
+        "replaced": "Laufender Timer {{label}} wird durch die Einträge ersetzt",
+        "kept": "Laufender Timer {{label}} bleibt, Einträge liegen davor",
+        "toKeep": "Timer behalten",
+        "toAdjust": "Timer anpassen"
+      },
+      "total": "Summe {{duration}}",
+      "hint": "↵ eintragen · esc verwerfen · ⇥ zum Ändern",
+      "hintQuestions": "Erst die gelben Rückfragen beantworten oder weglassen",
+      "submit": "Eintragen",
+      "toastLabel": "{{count}}× ({{duration}})"
     }
   }
 }

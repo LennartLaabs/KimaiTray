@@ -2,6 +2,7 @@
 //! hooks marked `ADVERSUM:`; see the repository CLAUDE.md.
 pub(crate) mod keystore;
 pub(crate) mod logos;
+pub(crate) mod multi;
 pub(crate) mod quick;
 #[cfg(target_os = "macos")]
 mod quick_panel;
