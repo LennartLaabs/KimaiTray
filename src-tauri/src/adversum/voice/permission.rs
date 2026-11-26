@@ -69,7 +69,14 @@ pub(crate) fn request(done: impl Fn(bool) + Send + 'static) {
 
 #[cfg(test)]
 mod tests {
-    use super::{from_status, Permission};
+    use super::{from_status, status, Permission};
+
+    #[test]
+    fn the_current_status_can_be_read_without_asking() {
+        // Reading goes through AVFoundation for real and never brings up the
+        // system dialog; this catches a wrong selector or a missing framework.
+        assert!(["granted", "denied", "undetermined"].contains(&status().as_str()));
+    }
 
     #[test]
     fn authorization_status_values_are_mapped() {
