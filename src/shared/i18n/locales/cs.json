@@ -889,7 +889,10 @@
       "multiModelClaude": {
         "found": "Claude Code: found",
         "missing": "Claude Code: not installed"
-      }
+      },
+      "team": "Team members",
+      "teamDescription": "First names of the team, separated by commas. In a sentence they are people one works with: they go into the note (\"Call mit Patrick\") and never decide the customer.",
+      "teamPlaceholder": "Patrick, Michi, …"
     },
     "reminder": {
       "title": "Start right away"
@@ -990,7 +993,8 @@
         "speech": "Noise floor {{floor}} · speech level {{level}} · gain ×{{gain}}",
         "saved": "Recording: {{path}}"
       },
-      "useInternal": "Download again to internal storage"
+      "useInternal": "Download again to internal storage",
+      "endsAt": "{{label}} ends at {{time}}"
     },
     "multi": {
       "title": "Review and enter · {{count}}",

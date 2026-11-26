@@ -44,7 +44,15 @@ export interface AdversumSettings {
    * "off" (rules only).
    */
   multiModel: MultiModelMode;
+  /**
+   * First names of colleagues. In a sentence they are people one works with:
+   * they go into the note ("Call mit Patrick") and never decide the customer.
+   */
+  teamMembers: string[];
 }
+
+export const MAX_TEAM_MEMBERS = 50;
+const MAX_NAME_LENGTH = 40;
 
 export type MultiModelMode = "auto" | "device" | "off";
 export const MULTI_MODEL_MODES: readonly MultiModelMode[] = ["auto", "device", "off"];
@@ -65,6 +73,7 @@ export const defaultAdversumSettings: AdversumSettings = {
   voiceInputDevice: "",
   voiceDebug: false,
   multiModel: "auto",
+  teamMembers: ["Patrick", "Michi", "Ema", "Lennart"],
 };
 
 const ALIAS_KINDS: readonly AliasKind[] = ["customers", "projects", "activities"];
@@ -149,6 +158,13 @@ export function normalizeAdversumSettings(raw: unknown): AdversumSettings {
     voiceInputDevice: stringValue(value.voiceInputDevice, "", 512),
     voiceDebug: value.voiceDebug === true,
     multiModel: MULTI_MODEL_MODES.find((mode) => mode === value.multiModel) ?? "auto",
+    teamMembers: Array.isArray(value.teamMembers)
+      ? value.teamMembers
+          .filter((name): name is string => typeof name === "string")
+          .map((name) => name.trim())
+          .filter((name) => name !== "" && name.length <= MAX_NAME_LENGTH)
+          .slice(0, MAX_TEAM_MEMBERS)
+      : defaultAdversumSettings.teamMembers,
   };
 }
 

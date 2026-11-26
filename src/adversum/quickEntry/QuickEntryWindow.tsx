@@ -73,6 +73,7 @@ export default function QuickEntryWindow() {
     client,
     isConfigured,
     settings.aliases[activeConnectionId],
+    settings.teamMembers,
   );
   const [stage, setStage] = useState<Stage>({ name: "idle" });
   const [focus, setFocus] = useState({ request: 0, text: "" });
@@ -250,6 +251,7 @@ export default function QuickEntryWindow() {
                 state={stage.state}
                 catalog={catalog}
                 history={history}
+                client={client}
                 onAction={send}
                 onEdit={edit}
                 onClose={close}

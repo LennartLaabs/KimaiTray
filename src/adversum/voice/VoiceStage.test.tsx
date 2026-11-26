@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   finishVoice: vi.fn(),
   openVoicePrivacySettings: vi.fn(),
   reloadModelInternally: vi.fn(),
+  running: null as unknown,
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -18,6 +19,9 @@ vi.mock("react-i18next", () => ({
       options ? `${key}:${Object.values(options).join(",")}` : key,
     i18n: { language: "de" },
   }),
+}));
+vi.mock("../multi/useDayEntries", () => ({
+  useDayEntries: () => ({ busy: [], running: mocks.running, ready: true }),
 }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ listen: mocks.listen }),
@@ -89,6 +93,7 @@ function selected(): string | null {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.running = null;
   vi.useFakeTimers();
   handlers = {};
   mocks.listen.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
@@ -341,6 +346,32 @@ describe("the confirmation card", () => {
     expect(waiting.container.querySelector("[data-voice-countdown]")).toBeNull();
     press("Enter");
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("says when the timer that runs now will end", () => {
+    // Runs since midnight; the new task began 20 minutes ago.
+    const begin = new Date();
+    begin.setHours(0, 0, 0, 0);
+    mocks.running = { id: 7, projectId: 21, activityId: 2, description: "", begin };
+    const { container } = result("Seit 20 Minuten DUSW Projektmanagement");
+    expect(container.querySelector("[data-voice-ending]")!.textContent).toMatch(
+      /^adversum\.voice\.endsAt:Herosmile · Design,\d{2}:\d{2}/,
+    );
+    // A timer Kimai knows but the catalog does not still gets a line.
+    cleanup();
+    mocks.running = { id: 7, projectId: 99, activityId: 9, description: "", begin };
+    const unknown = result("Seit 20 Minuten DUSW Projektmanagement");
+    expect(unknown.container.querySelector("[data-voice-ending]")!.textContent).toContain(
+      "adversum.multi.timer.unknown",
+    );
+    // A task that starts now, or a timer that began later, needs no line.
+    cleanup();
+    expect(result("DUSW Projektmanagement").container.querySelector("[data-voice-ending]")).toBeNull();
+    cleanup();
+    mocks.running = { id: 7, projectId: 21, activityId: 2, description: "", begin: new Date() };
+    expect(
+      result("Seit 20 Minuten DUSW Projektmanagement").container.querySelector("[data-voice-ending]"),
+    ).toBeNull();
   });
 
   it("takes the first suggestion as it is, also by mouse", () => {

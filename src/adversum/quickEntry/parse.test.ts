@@ -249,6 +249,31 @@ describe("parseQuickEntry", () => {
     expect(top("dusw-flyer pm").note).toBe("Flyer Pm");
   });
 
+  it("puts a colleague into the note and never takes them for a customer", () => {
+    const withTeam = buildCatalog(
+      [
+        { id: 1, name: "DUSW" },
+        { id: 2, name: "Patrizia Immobilien" },
+      ],
+      [
+        { id: 11, name: "Retainer", customer: 1 },
+        { id: 21, name: "Website", customer: 2 },
+      ],
+      [{ id: 2, name: "Austausch", project: null }],
+      { customers: {}, projects: {}, activities: { "2": ["call"] } },
+      ["Patrick"],
+    );
+    const read = (input: string) => parseQuickEntry(input, withTeam, EMPTY_HISTORY, now);
+    expect(read("dusw call patrick angebot").suggestions[0]).toMatchObject({
+      combination: { customer: "DUSW", activity: "Austausch" },
+      note: "Call mit Patrick: Angebot",
+    });
+    // "patrick" is close to "Patrizia", but he is a colleague.
+    const first = read("patrick call").suggestions[0]!;
+    expect(first.words.customer).toEqual([]);
+    expect(first.note).toBe("Mit Patrick: Call");
+  });
+
   it("recognizes commands instead of suggesting tasks", () => {
     for (const [input, command] of [
       ["stop", "stop"], ["pause", "pause"], ["weiter", "resume"], ["zurück", "previous"],

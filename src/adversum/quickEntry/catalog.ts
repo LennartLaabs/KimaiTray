@@ -53,17 +53,31 @@ export interface QuickCatalog {
   customers: ReadonlyMap<number, EntityWords>;
   projects: ReadonlyMap<number, EntityWords>;
   activities: ReadonlyMap<number, EntityWords>;
+  /**
+   * Names of colleagues, normalized. They are people one works with, not
+   * customers: such a word never names a task and never hints at one. It
+   * only goes into the note ("Call mit Patrick").
+   */
+  team: ReadonlySet<string>;
 }
 
 export function combinationKey(projectId: number, activityId: number): string {
   return `${projectId}-${activityId}`;
 }
 
-function entityWords(name: string, aliases: readonly string[] | undefined): EntityWords {
+function entityWords(
+  name: string,
+  aliases: readonly string[] | undefined,
+  team: ReadonlySet<string>,
+): EntityWords {
   const nameWords = normalizeWords(name);
   return {
     words: [...new Set(nameWords.flatMap(wordVariants))],
-    aliases: [...new Set((aliases ?? []).flatMap(normalizeWords))],
+    // A colleague's name that was stored as an alias (learned before the
+    // team list existed) does not count.
+    aliases: [...new Set((aliases ?? []).flatMap(normalizeWords))].filter(
+      (alias) => !team.has(alias),
+    ),
     acronym: nameWords.length > 1 ? nameWords.map((word) => word[0]).join("") : "",
   };
 }
@@ -82,7 +96,9 @@ export function buildCatalog(
   projects: readonly CatalogProject[],
   activities: readonly CatalogActivity[],
   aliases?: ConnectionAliases,
+  teamMembers: readonly string[] = [],
 ): QuickCatalog {
+  const team = new Set(teamMembers.flatMap(normalizeWords));
   const visible = <T extends { visible?: boolean }>(items: readonly T[]) =>
     items.filter((item) => item.visible !== false);
   const customerById = new Map(visible(customers).map((customer) => [customer.id, customer]));
@@ -126,7 +142,7 @@ export function buildCatalog(
     new Map(
       [...entities.values()].map((entity) => [
         entity.id,
-        entityWords(entity.name, aliases?.[kind][String(entity.id)]),
+        entityWords(entity.name, aliases?.[kind][String(entity.id)], team),
       ]),
     );
 
@@ -135,5 +151,6 @@ export function buildCatalog(
     customers: wordsOf(usedCustomers, "customers"),
     projects: wordsOf(usedProjects, "projects"),
     activities: wordsOf(usedActivities, "activities"),
+    team,
   };
 }

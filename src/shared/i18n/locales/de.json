@@ -889,7 +889,10 @@
       "multiModelClaude": {
         "found": "Claude Code: gefunden",
         "missing": "Claude Code: nicht installiert"
-      }
+      },
+      "team": "Teammitglieder",
+      "teamDescription": "Vornamen aus dem Team, mit Komma getrennt. Sie gelten in einem Satz als Personen, mit denen man arbeitet: Sie stehen in der Notiz („Call mit Patrick“) und bestimmen nie den Kunden.",
+      "teamPlaceholder": "Patrick, Michi, …"
     },
     "reminder": {
       "title": "Direkt starten"
@@ -990,7 +993,8 @@
         "speech": "Grundrauschen {{floor}} · Sprachpegel {{level}} · Verstärkung ×{{gain}}",
         "saved": "Aufnahme: {{path}}"
       },
-      "useInternal": "Neu laden auf internen Speicher"
+      "useInternal": "Neu laden auf internen Speicher",
+      "endsAt": "{{label}} endet um {{time}}"
     },
     "multi": {
       "title": "Prüfen und eintragen · {{count}}",

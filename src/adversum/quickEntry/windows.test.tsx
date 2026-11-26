@@ -345,7 +345,7 @@ describe("AdversumPopupQuick", () => {
     render(<AdversumPopupQuick {...options} />, { wrapper });
     await waitFor(() =>
       expect(mocks.setVoiceVocabulary).toHaveBeenCalledWith(
-        "Projekte: Retainer, Social. Tätigkeiten: Projektmanagement. Kürzel: pm. Kunden: DUSW, Herosmile.",
+        "Notizen: Patrick, Michi, Ema, Lennart. Projekte: Retainer, Social. Tätigkeiten: Projektmanagement. Kürzel: pm. Kunden: DUSW, Herosmile.",
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "adversum.voice.speak" }));

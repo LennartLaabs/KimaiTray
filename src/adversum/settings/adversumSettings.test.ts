@@ -43,6 +43,7 @@ describe("normalizeAdversumSettings", () => {
         voiceInputDevice: "coreaudio:usb",
         voiceDebug: true,
         multiModel: "device",
+        teamMembers: [" Patrick ", "", 7, "x".repeat(41), "Ema"],
       }),
     ).toEqual({
       customerIndicator: "dots",
@@ -58,6 +59,7 @@ describe("normalizeAdversumSettings", () => {
       voiceInputDevice: "coreaudio:usb",
       voiceDebug: true,
       multiModel: "device",
+      teamMembers: ["Patrick", "Ema"],
     });
     expect(
       normalizeAdversumSettings({
@@ -73,6 +75,7 @@ describe("normalizeAdversumSettings", () => {
         voiceInputDevice: "x".repeat(513),
         voiceDebug: 1,
         multiModel: "cloud",
+        teamMembers: "Patrick",
       }),
     ).toEqual(defaultAdversumSettings);
     expect(defaultAdversumSettings).toMatchObject({

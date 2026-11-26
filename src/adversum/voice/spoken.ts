@@ -1,6 +1,6 @@
 import type { QuickCatalog } from "../quickEntry/catalog";
 import type { QuickCommand } from "../quickEntry/commands";
-import { parseDate } from "../quickEntry/dateParser";
+import { parseDate, sameDay } from "../quickEntry/dateParser";
 import type { QuickHistory } from "../quickEntry/history";
 import { normalizeText } from "../quickEntry/normalize";
 import { parseQuickEntry, type QuickParseResult } from "../quickEntry/parse";
@@ -31,6 +31,11 @@ export type SpokenIntent =
       noteLead: string;
       /** Beginnings of activity names the verb points to, best first. */
       activityHints: string[];
+      /**
+       * The work is still going on ("bin seit 30 Minuten im Call", "sind
+       * immer noch dran"): a timer that keeps running, never a finished entry.
+       */
+      running: boolean;
     };
 
 /** What Whisper tends to write for silence or noise. */
@@ -79,8 +84,18 @@ const COMMAND_PADDING = new Set([
 const FILLERS = new Set([
   "aeh", "aehm", "ehm", "oehm", "hm", "hmm", "mh", "bitte", "mal", "halt", "quasi",
   "sozusagen", "eigentlich", "also", "jetzt", "gerade", "eben", "nun", "ich",
-  "wir", "hab", "habe", "hatte", "bin", "war",
+  "wir", "hab", "habe", "hatte", "bin", "war", "sind", "waren", "immer", "noch", "dran",
+  "dabei", "laeuft",
 ]);
+/**
+ * Says that the work is still going on. "seit" needs no entry here: the time
+ * parser reads it as a start anyway.
+ */
+const STILL_RUNNING = /\b(immer noch|noch immer|noch dran|noch dabei|laeuft noch|laeuft gerade)\b/;
+/** Says so too, unless the sentence looks back ("hab gerade … gemacht"). */
+const NOW_RUNNING =
+  /\b(gerade|bin (im|in|am|an|bei|beim|mit|dran|dabei)|sind (im|in|am|an|bei|beim|dran|dabei)|sitze (im|in|am|an|bei|beim))\b/;
+const LOOKS_BACK = /\b(hab|habe|haben|hatte|hatten)\b/;
 /** Carry no meaning at the start: "starte", "weiter mit dem", "okay, an der". */
 const LEAD_INS = new Set([
   "mache", "mach", "arbeite", "sitze", "starte", "start", "starten", "beginne", "fange",
@@ -103,6 +118,8 @@ const VERB_GROUPS: [string[], Verb][] = [
   [["telefoniert", "telefoniere", "telefonieren"], { lead: "Telefonat", hints: TALK_HINTS }],
   [["gecallt", "gecalled", "calle"], { lead: "Call", hints: TALK_HINTS }],
   [["gesprochen", "spreche", "geredet", "rede"], { lead: "Gespräch", hints: TALK_HINTS }],
+  // "Wir besprechen den Messestand": says what the talk is about, no more.
+  [["besprechen", "sprechen", "reden", "klaeren"], { lead: "", hints: TALK_HINTS }],
   [
     ["besprochen", "bespreche", "abgestimmt"],
     { lead: "Abstimmung", hints: ["abstimmung", "austausch", "besprechung", "meeting", "call"] },
@@ -211,6 +228,8 @@ export function interpretSpoken(transcript: string, now: Date): SpokenIntent {
     text: [...tokens.map((token) => token.raw), ...(day ? [day] : [])].join(" "),
     noteLead: telling?.lead ?? "",
     activityHints: telling?.hints ?? [],
+    running:
+      STILL_RUNNING.test(folded) || (NOW_RUNNING.test(folded) && !LOOKS_BACK.test(folded)),
   };
 }
 
@@ -241,5 +260,15 @@ export function readSpoken(
   });
   // The parser knows a few more command words ("resume", "back").
   if (result.command) return { kind: "command", command: result.command };
+  // "Bin gerade 30 Minuten im Call": a duration of work that still goes on
+  // is when it started, not an entry that is over.
+  const duration = result.time.kind === "range" && !/^von\b/i.test(result.timePhrase);
+  if (intent.running && duration && result.time.kind === "range" && sameDay(result.time.end, now)) {
+    return {
+      kind: "entry",
+      text: intent.text,
+      result: { ...result, time: { kind: "start", begin: result.time.begin } },
+    };
+  }
   return { kind: "entry", text: intent.text, result };
 }

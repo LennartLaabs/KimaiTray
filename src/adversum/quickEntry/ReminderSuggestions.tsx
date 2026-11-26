@@ -36,6 +36,7 @@ function Suggestions({ onStarted }: ReminderSuggestionsProps) {
     client,
     isConfigured,
     settings.aliases[activeConnectionId],
+    settings.teamMembers,
   );
   const suggestions = useMemo(
     () =>

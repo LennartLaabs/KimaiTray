@@ -79,7 +79,12 @@ function entityOf(
  */
 export function aliasesToLearn({ spoken, proposed, chosen, catalog }: LearnInput): LearnedAlias[] {
   const words = [...new Set(normalizeWords(spoken))].filter(
-    (word) => word.length >= MIN_ALIAS_LENGTH && !/^\d/.test(word) && !NOT_A_NAME.has(word),
+    (word) =>
+      word.length >= MIN_ALIAS_LENGTH &&
+      !/^\d/.test(word) &&
+      !NOT_A_NAME.has(word) &&
+      // A colleague is no customer, however often they share a sentence.
+      !catalog.team.has(word),
   );
   const targets = KINDS.map(({ kind, alias }) => ({
     kind,

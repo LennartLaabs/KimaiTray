@@ -16,7 +16,7 @@ const STORE_PATH: &str = "adversum.json";
 const SETTINGS_KEY: &str = "settings";
 const MAX_SETTINGS_BYTES: usize = 512 * 1024;
 const CHANGED_EVENT: &str = "adversum://settings-changed";
-const SETTINGS_KEYS: [&str; 13] = [
+const SETTINGS_KEYS: [&str; 14] = [
     "customerIndicator",
     "logoDevToken",
     "shortcutQuickEntry",
@@ -30,7 +30,10 @@ const SETTINGS_KEYS: [&str; 13] = [
     "voiceInputDevice",
     "voiceDebug",
     "multiModel",
+    "teamMembers",
 ];
+const MAX_TEAM_MEMBERS: usize = 50;
+const MAX_NAME_CHARS: usize = 40;
 const WRITER_WINDOWS: [&str; 1] = ["settings"];
 /// Windows that confirm quick actions may add aliases they learned, and
 /// nothing else.
@@ -85,6 +88,19 @@ fn validate_voice(values: &Map<String, Value>) -> Result<(), String> {
     if let Some(model) = values.get(models::MODEL_KEY) {
         if model.as_str().and_then(models::spec).is_none() {
             return Err("Unknown speech model".into());
+        }
+    }
+    if let Some(team) = values.get("teamMembers") {
+        let valid = team.as_array().is_some_and(|names| {
+            names.len() <= MAX_TEAM_MEMBERS
+                && names.iter().all(|name| {
+                    name.as_str().is_some_and(|name| {
+                        !name.trim().is_empty() && name.chars().count() <= MAX_NAME_CHARS
+                    })
+                })
+        });
+        if !valid {
+            return Err("Invalid team members".into());
         }
     }
     if let Some(mode) = values.get(super::multi::MODE_KEY) {
@@ -278,7 +294,8 @@ mod tests {
         let mut settings = Map::new();
         let ok = json!({"voiceEnabled": true, "voiceModel": "base", "voiceModelDir": "",
             "voiceTapMode": false, "shortcutVoice": "Control+Alt+V",
-            "voiceInputDevice": "coreaudio:abc", "voiceDebug": true, "multiModel": "device"});
+            "voiceInputDevice": "coreaudio:abc", "voiceDebug": true, "multiModel": "device",
+            "teamMembers": ["Patrick", "Ema"]});
         apply_patch(&mut settings, object(ok)).unwrap();
         assert_eq!(settings["voiceModel"], "base");
         for bad in [
@@ -293,6 +310,11 @@ mod tests {
             json!({"voiceInputDevice": "x".repeat(513)}),
             json!({"multiModel": "cloud"}),
             json!({"multiModel": true}),
+            json!({"teamMembers": "Patrick"}),
+            json!({"teamMembers": ["Patrick", 3]}),
+            json!({"teamMembers": [" "]}),
+            json!({"teamMembers": ["x".repeat(41)]}),
+            json!({"teamMembers": vec!["a"; 51]}),
         ] {
             assert!(apply_patch(&mut settings, object(bad)).is_err());
         }

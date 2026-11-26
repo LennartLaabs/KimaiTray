@@ -125,6 +125,15 @@ Windows may only `emitTo` a named window (`core:event:allow-emit-to`); plain `em
 - `shortcuts.rs`: registers the two fork shortcuts from the fork settings. Upstream's `register_handlers` calls `unregister_all`, so it ends with a hook that registers ours again. A shortcut the system refuses is not saved (`adversum_patch_settings` registers before it persists).
 - Dev check without pressing a shortcut (debug builds only): `ADVERSUM_SHOW_QUICK=1 npm run tauri dev` opens the bar at launch and resizes it once, `ADVERSUM_SHOW_QUICK=toast …` shows the toast. The log lines "Quick entry panel placed" give the frame and the visible screen area in points. Tell Lennart before starting a dev instance and quit it afterwards (repository `CLAUDE.md`, "Only the installed app runs"); add `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, because a second instance with the same identifier exits at once.
 
+### Work that is still going on, and colleagues
+
+"Bin seit 30 Minuten mit Patrick im Call für DUSW, wir besprechen den Messestand, sind immer noch dran" starts a timer that began half an hour ago and keeps running; it is never a finished 30-minute entry.
+
+- **Running or finished** (`voice/spoken.ts`). "seit …" is a start anyway. A bare duration becomes a start as well when the sentence says the work goes on: "immer noch", "noch dran", "läuft noch" always, "gerade", "bin im …", "sitze an …" unless the sentence looks back with "hab …" ("hab gerade 20 Minuten … gemacht" is done). A time span ("von 13 bis 14") is always finished.
+- **Colleagues** (setting `teamMembers`, Settings → Quick entry; `QuickCatalog.team`). A colleague's name never names a customer, not as a stored alias, not through past notes, and is never learned as one. It goes into the note after the kind of work: "Call mit Patrick: Messestand" (what, with whom, about what).
+- **The customer comes from the sentence.** A spoken sentence starts by itself only when a word names the customer or the project. Otherwise the card shows the ranked suggestions and waits.
+- **What ran before** ends at the moment the new task began, not now (`useQuickExecutor.ts`), so the two never overlap; the card says "… endet um 20:54". Undo deletes the new entry and lets the old one run on. A timer that began after the new task's begin is stopped by the switch as usual.
+
 ## Several entries from one sentence
 
 "Ich hab eine Stunde an DUSW Design gearbeitet, dazwischen 10 Minuten K&K Call" is two tasks and three entries. Typed or spoken, such a sentence goes to a review instead of the single card (`multi/`).

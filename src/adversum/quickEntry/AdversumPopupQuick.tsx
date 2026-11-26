@@ -34,6 +34,7 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
     options.client,
     options.timersReady,
     settings.aliases[options.connectionId],
+    settings.teamMembers,
   );
   const { execute } = useQuickExecutor(options);
   const [focus, setFocus] = useState({ request: 0, text: "" });
@@ -44,8 +45,12 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
   // vocabulary current: every name that can be started, and the aliases.
   const aliases = settings.aliases[options.connectionId];
   const vocabulary = useMemo(
-    () => (settings.voiceEnabled ? buildVocabulary(catalog, aliases, history.noteNames) : ""),
-    [settings.voiceEnabled, catalog, aliases, history.noteNames],
+    () =>
+      settings.voiceEnabled
+        ? // Colleagues' names are said often and should be written right.
+          buildVocabulary(catalog, aliases, [...settings.teamMembers, ...history.noteNames])
+        : "",
+    [settings.voiceEnabled, catalog, aliases, history.noteNames, settings.teamMembers],
   );
   useEffect(() => {
     if (vocabulary) void setVoiceVocabulary(vocabulary).catch(() => undefined);

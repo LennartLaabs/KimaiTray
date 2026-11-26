@@ -218,6 +218,21 @@ describe("aliasesToLearn", () => {
     ).toEqual([]);
   });
 
+  it("never learns a colleague's name as an alias", () => {
+    const withTeam = buildCatalog(customers, projects, activities, aliases, ["Patrick"]);
+    const learn = (catalogToUse: typeof catalog) =>
+      aliasesToLearn({
+        spoken: "Patrick Design",
+        proposed: parseQuickEntry("Patrick Design", catalogToUse, EMPTY_HISTORY, now, {})
+          .suggestions[0]!,
+        chosen: combination("31-2"),
+        catalog: catalogToUse,
+      });
+    // Without the team list the only leftover word would become the customer's alias.
+    expect(learn(catalog)).toHaveLength(1);
+    expect(learn(withTeam)).toEqual([]);
+  });
+
   it("never takes the exact name of something else, short words or times", () => {
     // "Design" is an activity of its own and cannot become an alias for another.
     const proposed: QuickSuggestion = {

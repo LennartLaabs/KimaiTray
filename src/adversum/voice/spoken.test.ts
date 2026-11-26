@@ -127,7 +127,9 @@ describe("thirty things people say", () => {
       activity: "Austausch",
       note: "Telefonat Gigi",
       time: { kind: "range", begin: at(10), end: at(11) },
-      autoSelect: true,
+      // The customer was not said, only found in old notes: the card shows
+      // it first and waits for a choice.
+      autoSelect: false,
     });
   });
 
@@ -250,7 +252,7 @@ describe("thirty things people say", () => {
       activity: "Austausch",
       note: "Telefonat Gigi",
       time: { kind: "none" },
-      autoSelect: true,
+      autoSelect: false,
     });
   });
 
@@ -474,6 +476,7 @@ describe("interpretSpoken", () => {
       text: "Patrick über das Angebot",
       noteLead: "Gespräch",
       activityHints: expect.arrayContaining(["austausch", "call"]),
+      running: false,
     });
     expect(interpretSpoken("Am Onlineshop programmiert", now)).toMatchObject({
       text: "Onlineshop",
@@ -769,6 +772,137 @@ describe("sentences with a date and with people", () => {
     expect(interpretSpoken("Gestern von 9 bis 10 DUSW Design", now)).toMatchObject({
       kind: "entry",
       text: "von 9 bis 10 DUSW Design 25.11.2026",
+    });
+  });
+});
+
+describe("work that is still going on, and colleagues", () => {
+  // Patrick and Michi are colleagues. Patrick was once learned as an alias
+  // for DUSW and stands in old notes of K&K; neither may decide anything.
+  const team = buildCatalog(
+    customers,
+    projects,
+    activities,
+    {
+      customers: { "1": ["gigi", "patrick"], "3": ["kaka"] },
+      projects: {},
+      activities: { "1": ["pm"], "2": ["call", "telefonat", "meeting"] },
+    },
+    ["Patrick", "Michi"],
+  );
+  const withPatrick = buildHistory(
+    [
+      ...past(31, 2, 5, "Call Patrick"),
+      ...past(11, 2, 4, "Abstimmung"),
+      ...past(12, 4, 3, "Startseite"),
+      ...past(11, 1, 6, "Planung"),
+    ],
+    now,
+  );
+
+  function said(sentence: string) {
+    const reading = readSpoken(sentence, team, withPatrick, now);
+    if (reading.kind !== "entry") throw new Error(`"${sentence}" was read as ${reading.kind}`);
+    const first = reading.result.suggestions[0]!;
+    return {
+      task: `${first.combination.customer} · ${first.combination.activity}`,
+      note: first.note,
+      time: reading.result.time,
+      autoSelect: reading.result.autoSelect,
+      /** Some suggestion claims the sentence names its customer or project. */
+      named: reading.result.suggestions.some((suggestion) => suggestion.namesTarget),
+    };
+  }
+
+  it("1: a call that began half an hour ago keeps running", () => {
+    expect(
+      said(
+        "Bin seit 30 Minuten mit Patrick im Call für DUSW, wir besprechen den Messestand, sind immer noch dran",
+      ),
+    ).toEqual({
+      task: "DUSW · Austausch",
+      note: "Call mit Patrick: Messestand",
+      time: { kind: "start", begin: at(13, 50) },
+      autoSelect: true,
+      named: true,
+    });
+  });
+
+  it("2: without a customer nothing starts by itself", () => {
+    const call = said("Bin seit 20 Minuten im Call mit Patrick");
+    expect(call).toMatchObject({
+      note: "Call mit Patrick",
+      time: { kind: "start", begin: at(14, 0) },
+      autoSelect: false,
+      // Neither his name as a stored alias nor the old notes with it in them
+      // say anything about the customer: the list is the usual ranking.
+      named: false,
+    });
+  });
+
+  it("3: looking back is a finished entry", () => {
+    expect(said("Ich hab 30 Minuten mit Patrick für K&K telefoniert")).toEqual({
+      task: "K&K Global Solutions · Austausch",
+      note: "Telefonat mit Patrick",
+      time: { kind: "range", begin: at(13, 50), end: at(14, 20) },
+      autoSelect: true,
+      named: true,
+    });
+  });
+
+  it("4: a duration of work that still goes on is when it began", () => {
+    expect(said("Sitze gerade eine Stunde am DUSW Design, läuft noch")).toEqual({
+      task: "DUSW · Design",
+      note: "",
+      time: { kind: "start", begin: at(13, 20) },
+      autoSelect: true,
+      named: true,
+    });
+  });
+
+  it("5: 'gerade' after 'hab' means just now, and done", () => {
+    expect(said("Hab gerade 20 Minuten SolarTech Konzeption gemacht").time).toEqual({
+      kind: "range",
+      begin: at(14, 0),
+      end: at(14, 20),
+    });
+  });
+
+  it("6: a clock time with 'seit' keeps running", () => {
+    expect(said("Seit 13 Uhr im Meeting mit Michi und Patrick für Herosmile wegen Onlineshop")).toEqual({
+      task: "Herosmile · Austausch",
+      // "Onlineshop" is the project, so it is no topic.
+      note: "Meeting mit Michi und Patrick",
+      time: { kind: "start", begin: at(13) },
+      autoSelect: true,
+      named: true,
+    });
+  });
+
+  it("7: 'immer noch' wins over looking back", () => {
+    expect(
+      said("Ich hab jetzt 45 Minuten K&K Design gemacht und bin immer noch dran").time,
+    ).toEqual({ kind: "start", begin: at(13, 35) });
+  });
+
+  it("8: a colleague's name stored as an alias names no customer", () => {
+    expect(said("Patrick Design")).toMatchObject({ note: "Mit Patrick", autoSelect: false });
+    expect(said("Kurzer Austausch mit Patrick").autoSelect).toBe(false);
+  });
+
+  it("9: a time span is finished whatever else is said", () => {
+    expect(said("Bin gerade von 13 bis 14 im Call mit Patrick für DUSW gewesen").time).toEqual({
+      kind: "range",
+      begin: at(13),
+      end: at(14),
+    });
+  });
+
+  it("10: a customer's contact is no colleague and still finds the customer", () => {
+    expect(said("Bin seit zehn Minuten mit Gigi am Telefonieren, läuft noch")).toMatchObject({
+      task: "DUSW · Austausch",
+      time: { kind: "start", begin: at(14, 10) },
+      autoSelect: true,
     });
   });
 });

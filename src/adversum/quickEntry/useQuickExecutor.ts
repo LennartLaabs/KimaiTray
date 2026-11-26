@@ -320,6 +320,17 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
 
         const stopped = current.timers.map((timer) => timer.id);
         const [running] = current.timers;
+        // A task that began a while ago ("seit 30 Minuten im Call") takes
+        // over from that moment: what ran before ends there, not now, so the
+        // two never overlap. Undo lets it run on as if nothing had happened.
+        if (action.mode === "switch" && action.begin) {
+          const begin = new Date(action.begin).getTime();
+          for (const timer of current.timers) {
+            if (timer.beginSeconds * 1000 < begin) {
+              await updateTimesheet(current.client, timer.id, { end: action.begin });
+            }
+          }
+        }
         let interrupted: { timesheetId: number; pausedId: string } | null = null;
         if (action.mode === "interrupt" && running) {
           if (current.busy) return announce("failed", label);

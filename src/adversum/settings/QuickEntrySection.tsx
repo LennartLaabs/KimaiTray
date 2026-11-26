@@ -173,6 +173,30 @@ export default function QuickEntrySection() {
 
       <SettingsList>
         <SettingsRow
+          label={t("adversum.quickSettings.team")}
+          description={t("adversum.quickSettings.teamDescription")}
+        >
+          <input
+            type="text"
+            // Shows what is stored again once a save has come back.
+            key={settings.teamMembers.join(",")}
+            defaultValue={settings.teamMembers.join(", ")}
+            spellCheck={false}
+            aria-label={t("adversum.quickSettings.team")}
+            placeholder={t("adversum.quickSettings.teamPlaceholder")}
+            onBlur={(event) => {
+              const names = parseAliasInput(event.target.value);
+              if (names.join(",") !== settings.teamMembers.join(",")) {
+                void update("teamMembers", names);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            className="h-[29px] w-[230px] shrink-0 rounded-lg border border-[var(--s-line)] bg-[var(--s-card)] px-2.5 text-[12.5px] text-[var(--s-fg)] outline-none placeholder:text-[var(--s-fg-subtle)] focus:border-[var(--accent)]"
+          />
+        </SettingsRow>
+        <SettingsRow
           label={t("adversum.quickSettings.multiModel")}
           description={
             <>

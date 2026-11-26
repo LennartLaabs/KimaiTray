@@ -213,6 +213,20 @@ describe("QuickEntrySection", () => {
     await act(async () => answer({ mode: "auto", apple: "available", claude: true }));
   });
 
+  it("keeps the list of team members", async () => {
+    await renderSection();
+    const field = screen.getByLabelText("adversum.quickSettings.team") as HTMLInputElement;
+    expect(field.value).toBe("Patrick, Michi, Ema, Lennart");
+    // Leaving the field unchanged saves nothing.
+    fireEvent.blur(field);
+    expect(mocks.settings.update).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "Patrick, Ema , patrick," } });
+    fireEvent.keyDown(field, { key: "a" });
+    fireEvent.keyDown(field, { key: "Enter" });
+    fireEvent.blur(field);
+    expect(mocks.settings.update).toHaveBeenCalledWith("teamMembers", ["Patrick", "Ema"]);
+  });
+
   it("saves a recorded shortcut and reports a rejected one", async () => {
     await renderSection();
     const record = screen.getByLabelText(

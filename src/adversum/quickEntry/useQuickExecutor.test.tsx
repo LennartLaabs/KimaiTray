@@ -148,6 +148,30 @@ describe("starting a task", () => {
     expect(options.pauseTimer).not.toHaveBeenCalled();
   });
 
+  it("ends what ran before at the moment the new task began, and undoes both", async () => {
+    // 09:45 is when the call began; one timer ran since 09:00, one since 09:50.
+    const seconds = (time: string) => new Date(`2026-11-26T${time}:00`).getTime() / 1000;
+    const earlier = { ...timer(7), beginSeconds: seconds("09:00") };
+    const later = { ...timer(8), beginSeconds: seconds("09:50") };
+    (options.startTask as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 55 });
+    const { result } = setup({ timers: [earlier, later] });
+    await act(() => result.current.execute(startAction));
+    expect(mocks.updateTimesheet).toHaveBeenCalledTimes(1);
+    expect(mocks.updateTimesheet).toHaveBeenCalledWith(client, 7, { end: "2026-11-26T09:45:00" });
+    // Cut before the start, so the two never overlap.
+    expect(mocks.updateTimesheet.mock.invocationCallOrder[0]!).toBeLessThan(
+      (options.startTask as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!,
+    );
+    await act(() => result.current.undo(result.current.toast!.id));
+    expect(mocks.deleteTimesheet).toHaveBeenCalledWith(client, 55);
+    expect(mocks.reopenTimesheet.mock.calls.map(([, id]) => id)).toEqual([7, 8]);
+
+    // A start now leaves the end of other timers to the switch itself.
+    mocks.updateTimesheet.mockClear();
+    await act(() => result.current.execute({ ...startAction, begin: null }));
+    expect(mocks.updateTimesheet).not.toHaveBeenCalled();
+  });
+
   it("starts now without a note and survives a missing quick window", async () => {
     mocks.emitTo.mockRejectedValue(new Error("no window"));
     const { result } = setup();

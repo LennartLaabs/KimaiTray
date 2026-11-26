@@ -41,6 +41,8 @@ const GLUE_WORDS = new Set([
   "und", "mit", "fuer", "bei", "beim", "an", "am", "im", "in", "zu", "zum", "zur",
   "von", "vom", "auf", "aus", "ueber", "the",
 ]);
+/** Lead into the topic of a talk; after "mit Patrick:" they say nothing. */
+const TOPIC_LEADS = new Set(["wegen", "bezueglich", "thema"]);
 
 /** How spoken input differs from typed input; see `voice/spoken.ts`. */
 export interface SpokenOptions {
@@ -118,6 +120,8 @@ interface NoteItem {
   kept: Kind | null;
   /** A connecting word between two note words ("für", "mit"). */
   glue?: boolean;
+  /** A colleague's name: "Patrick" in "Call mit Patrick". */
+  team?: boolean;
 }
 
 interface Assignment {
@@ -161,7 +165,11 @@ function bestKind(
  * A naming word that is more than a name stays in the note: "gigi call"
  * names customer and activity and still tells what was done.
  */
-function assign(words: readonly string[], entities: Record<Kind, EntityWords>): Assignment {
+function assign(
+  words: readonly string[],
+  entities: Record<Kind, EntityWords>,
+  team: ReadonlySet<string>,
+): Assignment {
   const closed = new Set<Kind>();
   const named: Record<Kind, string[]> = { customer: [], project: [], activity: [] };
   const note: NoteItem[] = [];
@@ -172,7 +180,8 @@ function assign(words: readonly string[], entities: Record<Kind, EntityWords>): 
   for (; index < words.length; index++) {
     const word = words[index]!;
     const { kind, score } = bestKind(word, entities, closed, open);
-    if (!kind || score < MATCH_THRESHOLD) break;
+    // A colleague's name names no task, whatever it resembles.
+    if (!kind || score < MATCH_THRESHOLD || team.has(word)) break;
     if (open && open !== kind) closed.add(open);
     open = kind;
     textScore += score;
@@ -180,7 +189,9 @@ function assign(words: readonly string[], entities: Record<Kind, EntityWords>): 
     named[kind].push(word);
     if (!isNameLike(word, entities[kind])) note.push({ index, kept: kind });
   }
-  for (; index < words.length; index++) note.push({ index, kept: null });
+  for (; index < words.length; index++) {
+    note.push({ index, kept: null, ...(team.has(words[index]!) ? { team: true } : {}) });
+  }
   return {
     textScore,
     matchedWords,
@@ -199,6 +210,7 @@ function assign(words: readonly string[], entities: Record<Kind, EntityWords>): 
 function assignSpoken(
   words: readonly string[],
   entities: Record<Kind, EntityWords>,
+  team: ReadonlySet<string>,
 ): Assignment {
   const closed = new Set<Kind>();
   const named: Record<Kind, string[]> = { customer: [], project: [], activity: [] };
@@ -210,6 +222,11 @@ function assignSpoken(
   let noteStarted = false;
   words.forEach((word, index) => {
     const run = runs[runs.length - 1]!;
+    // A colleague's name is part of the note and nothing else.
+    if (team.has(word)) {
+      run.push({ index, kept: null, team: true });
+      return;
+    }
     // A glue word inside a name ("Haus am See") belongs to that name.
     if (GLUE_WORDS.has(word) && !(open && scoreWord(word, entities[open]) === 1)) {
       run.push({ index, kept: null, glue: true });
@@ -327,39 +344,68 @@ function formatNote(
   tokens: readonly InputToken[],
   lead: string,
 ): string {
-  const leading = items.filter((item) => item.kept === "activity");
+  // Colleagues are named after the kind of work: "Call mit Patrick".
+  const team = items.filter((item) => item.team);
+  const others = items.filter(
+    (item, position) =>
+      !item.team &&
+      // The connecting word in front of a colleague's name goes with it.
+      !(item.glue && items[position + 1]?.team),
+  );
+  const leading = others.filter((item) => item.kept === "activity");
   const ordered = [
     ...leading,
-    ...items.filter(
+    ...others.filter(
       (item, position) =>
         item.kept !== "activity" &&
         // A glue word in front of a word that moved away connects nothing.
-        !(item.glue && items[position + 1]?.kept === "activity"),
+        !(item.glue && others[position + 1]?.kept === "activity"),
     ),
   ];
   const inNote = new Set(ordered.map((item) => item.index));
   const written = new Set<InputToken>();
-  const pieces: { text: string; kept: boolean }[] = [];
+  const tokenOf = (index: number) =>
+    tokens.find((candidate) => candidate.members.includes(index))!;
+  const pieces: { text: string; kept: boolean; head: boolean; glue: boolean }[] = [];
   for (const item of ordered) {
-    const token = tokens.find((candidate) => candidate.members.includes(item.index))!;
+    const token = tokenOf(item.index);
     const whole = token.members.every((member) => inNote.has(member));
     if (whole && written.has(token)) continue;
     written.add(token);
     const text = whole ? withoutEdgePunctuation(token.raw) : words[item.index]!;
-    if (text) pieces.push({ text, kept: item.kept !== null });
+    if (text) {
+      pieces.push({
+        text,
+        kept: item.kept !== null,
+        head: item.kept === "activity",
+        glue: item.glue === true,
+      });
+    }
   }
 
   const plain = pieces.map((piece) => piece.text).join(" ");
   const lowercase = plain === plain.toLowerCase();
-  const texts = pieces.map((piece) => {
+  const write = (piece: { text: string; kept: boolean }) => {
     if (!lowercase) return piece.kept ? capitalize(piece.text) : piece.text;
     if (GLUE_WORDS.has(normalizeText(piece.text))) return piece.text;
     return piece.text.replace(/(^|-)(\p{L})/gu, (_, before: string, letter: string) =>
       before + letter.toUpperCase(),
     );
-  });
-  if (lead && normalizeText(texts[0] ?? "") !== normalizeText(lead)) texts.unshift(lead);
-  return capitalize(texts.join(" "));
+  };
+  const head = pieces.filter((piece) => piece.head).map(write);
+  if (lead && normalizeText(head[0] ?? "") !== normalizeText(lead)) head.unshift(lead);
+  const rest = pieces.filter((piece) => !piece.head);
+  if (team.length === 0) return capitalize([...head, ...rest.map(write)].join(" "));
+
+  // "Call mit Patrick: Messestand": what, with whom, about what.
+  const idle = (piece: { text: string; glue: boolean } | undefined) =>
+    !!piece && (piece.glue || TOPIC_LEADS.has(normalizeText(piece.text)));
+  while (idle(rest[0])) rest.shift();
+  while (idle(rest[rest.length - 1])) rest.pop();
+  const names = team.map((item) => capitalize(withoutEdgePunctuation(tokenOf(item.index).raw)));
+  const who = `mit ${names.join(" und ")}`;
+  const topic = rest.map(write).join(" ");
+  return capitalize(`${[...head, who].join(" ")}${topic ? `: ${topic}` : ""}`);
 }
 
 /**
@@ -413,11 +459,15 @@ export function parseQuickEntry(
       project: catalog.projects.get(combination.projectId)!,
       activity: catalog.activities.get(combination.activityId)!,
     };
-    const assignment = spoken ? assignSpoken(words, entities) : assign(words, entities);
+    const assignment = spoken
+      ? assignSpoken(words, entities, catalog.team)
+      : assign(words, entities, catalog.team);
     // What speaks for the combination besides the words that name it.
     const affinity = spoken
       ? noteAffinity(
-          assignment.note.filter((item) => item.kept === null).map((item) => words[item.index]!),
+          assignment.note
+            .filter((item) => item.kept === null && !item.team)
+            .map((item) => words[item.index]!),
           combination,
           history,
           customerOf,
@@ -476,6 +526,9 @@ export function parseQuickEntry(
     ),
     suggestions,
     confidence,
-    autoSelect: confidence >= AUTO_SELECT_CONFIDENCE,
+    // A spoken sentence starts by itself only when it names the customer or
+    // the project. What past notes suggest ranks the list, no more.
+    autoSelect:
+      confidence >= AUTO_SELECT_CONFIDENCE && (!spoken || !!first?.assignment.namesTarget),
   };
 }

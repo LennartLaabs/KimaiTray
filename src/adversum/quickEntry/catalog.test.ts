@@ -72,6 +72,20 @@ describe("buildCatalog", () => {
     expect(catalog.projects.has(13)).toBe(false);
   });
 
+  it("keeps colleagues apart from customers", () => {
+    const withTeam = buildCatalog(
+      customers,
+      projects,
+      activities,
+      { customers: { "1": ["gigi", "Patrick"] }, projects: {}, activities: {} },
+      ["Patrick", "Ema Maria"],
+    );
+    expect([...withTeam.team]).toEqual(["patrick", "ema", "maria"]);
+    // His name was stored as an alias once; it no longer counts.
+    expect(withTeam.customers.get(1)?.aliases).toEqual(["gigi"]);
+    expect(catalog.team.size).toBe(0);
+  });
+
   it("works without aliases", () => {
     const plain = buildCatalog(customers, projects, activities);
     expect(plain.customers.get(1)?.aliases).toEqual([]);

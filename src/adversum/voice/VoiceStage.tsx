@@ -2,6 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { actionForSuggestion, type QuickAction, type QuickStartMode } from "../quickEntry/actions";
+import type { KimaiClient } from "../../api/kimaiClient";
+import { useDayEntries } from "../multi/useDayEntries";
 import type { QuickCatalog } from "../quickEntry/catalog";
 import type { QuickHistory } from "../quickEntry/history";
 import type { QuickSuggestion } from "../quickEntry/parse";
@@ -36,6 +38,8 @@ interface VoiceStageProps {
   state: VoiceState;
   catalog: QuickCatalog;
   history: QuickHistory;
+  /** For asking Kimai which timer runs, to say when it will end. */
+  client?: KimaiClient | null;
   /** Runs what was said; `learned` are aliases a correction taught. */
   onAction: (action: QuickAction, learned: LearnedAlias[]) => void;
   /** Continue by typing, with the understood text in the bar. */
@@ -63,6 +67,7 @@ export default function VoiceStage({
   state,
   catalog,
   history,
+  client = null,
   onAction,
   onEdit,
   onClose,
@@ -106,6 +111,7 @@ export default function VoiceStage({
           text={state.text ?? ""}
           catalog={catalog}
           history={history}
+          client={client}
           onAction={onAction}
           onEdit={onEdit}
           onClose={onClose}
@@ -254,6 +260,7 @@ interface ConfirmProps {
   text: string;
   catalog: QuickCatalog;
   history: QuickHistory;
+  client: KimaiClient | null;
   onAction: (action: QuickAction, learned: LearnedAlias[]) => void;
   onEdit: (text: string, origin: VoiceOrigin) => void;
   onClose: () => void;
@@ -265,9 +272,11 @@ interface ConfirmProps {
  * once, ↑/↓ pick another suggestion, Tab continues by typing. Any of these
  * stops the countdown.
  */
-function Confirm({ text, catalog, history, onAction, onEdit, onClose }: ConfirmProps) {
+function Confirm({ text, catalog, history, client, onAction, onEdit, onClose }: ConfirmProps) {
   const { t } = useTranslation();
   const listId = useId();
+  const [shownAt] = useState(() => new Date());
+  const { running } = useDayEntries(client, shownAt);
   const reading = useMemo(
     () => readSpoken(text, catalog, history, new Date()),
     [text, catalog, history],
@@ -282,6 +291,26 @@ function Confirm({ text, catalog, history, onAction, onEdit, onClose }: ConfirmP
       reading.result.time.kind !== "future" &&
       reading.result.time.kind !== "incomplete" &&
       suggestions.length > 0);
+
+  // A task that began a while ago takes over from then: the timer that runs
+  // now ends at that moment, and the card says so.
+  const start = reading.kind === "entry" && reading.result.time.kind === "start"
+    ? reading.result.time.begin
+    : null;
+  const runningTask = running
+    ? catalog.combinations.find(
+        (item) => item.projectId === running.projectId && item.activityId === running.activityId,
+      )
+    : undefined;
+  const ending =
+    start && running && running.begin.getTime() < start.getTime()
+      ? {
+          label: runningTask
+            ? `${runningTask.customer} · ${runningTask.activity}`
+            : t("adversum.multi.timer.unknown"),
+          time: start.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+        }
+      : null;
 
   // The first row is always preselected, so Enter accepts it. Only a
   // confident reading also starts by itself.
@@ -446,6 +475,14 @@ function Confirm({ text, catalog, history, onAction, onEdit, onClose }: ConfirmP
         {rowCount === 0 && (
           <p role="alert" className="px-2.5 py-2 text-[12px] text-gray-500 dark:text-gray-400">
             {t(reading.kind === "empty" ? "adversum.voice.problem.empty" : "adversum.quick.empty")}
+          </p>
+        )}
+        {ending && (
+          <p
+            data-voice-ending
+            className="mx-2.5 mt-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+          >
+            {t("adversum.voice.endsAt", ending)}
           </p>
         )}
         {rowCount > 0 && (

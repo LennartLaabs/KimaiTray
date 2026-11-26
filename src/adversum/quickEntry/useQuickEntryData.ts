@@ -29,6 +29,7 @@ export function useQuickEntryData(
   client: KimaiClient | null,
   enabled: boolean,
   aliases: ConnectionAliases | undefined,
+  teamMembers: readonly string[] = [],
 ): QuickEntryData {
   const active = enabled && !!client;
   const scope = client?.cacheScope;
@@ -66,8 +67,9 @@ export function useQuickEntryData(
         projectsQ.data ?? [],
         activitiesQ.data ?? [],
         aliases,
+        teamMembers,
       ),
-    [customersQ.data, projectsQ.data, activitiesQ.data, aliases],
+    [customersQ.data, projectsQ.data, activitiesQ.data, aliases, teamMembers],
   );
   const history = useMemo(
     () => (historyQ.data ? buildHistory(historyQ.data, new Date()) : EMPTY_HISTORY),
