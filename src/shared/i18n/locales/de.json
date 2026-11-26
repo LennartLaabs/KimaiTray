@@ -783,7 +783,7 @@
     "settingsGroup": "Adversum",
     "logos": {
       "title": "Kundenlogos",
-      "description": "Zeigt statt der Farbpunkte ein rundes Kundenlogo. Logos werden einmal geladen, auf diesem Mac gespeichert und alle 30 Tage aktualisiert.",
+      "description": "Zeigt statt der Farbpunkte ein rundes Kundenlogo. Das Logo wird über die Homepage gesucht, die in Kimai beim Kunden hinterlegt ist, 30 Tage auf diesem Mac gespeichert und sofort neu geladen, wenn sich die Homepage in Kimai ändert. Ohne Logo wird nach einer Stunde erneut gesucht.",
       "display": "Darstellung",
       "indicator": "Kunden-Indikator",
       "indicatorDescription": "Logo zeigt das Kundenlogo mit der Aktivitätsfarbe als kleinem Punkt. Farbpunkte behält die ursprüngliche Darstellung.",
@@ -795,8 +795,8 @@
       "dropHint": "Bild auf einen Kunden ziehen oder eine Datei wählen, um das Logo von Hand zu setzen.",
       "noConnection": "Mit Kimai verbinden, um Kundenlogos zu verwalten.",
       "empty": "Diese Kimai-Verbindung hat keine sichtbaren Kunden.",
-      "reloadAll": "Alle Logos neu laden",
-      "reloadAllDescription": "Lädt jedes Logo neu, das nicht von Hand gesetzt wurde.",
+      "reloadAll": "Logos neu laden",
+      "reloadAllDescription": "Liest alle Homepages aus Kimai und lädt jedes Logo neu, das nicht von Hand gesetzt wurde.",
       "choose": "Bild wählen",
       "chooseFor": "Logo-Bild für {{customer}} wählen",
       "reload": "Neu laden",
@@ -804,11 +804,19 @@
       "failed": "Dieses Bild oder Logo konnte nicht geladen werden.",
       "tooLarge": "Das Bild ist größer als 5 MB.",
       "source": {
-        "manual": "Von Hand gesetzt",
-        "logodev": "Von logo.dev",
-        "homepage": "Von der Homepage",
-        "none": "Kein Logo gefunden, Initialen werden gezeigt",
+        "manual": "Manuell",
+        "logodev": "logo.dev",
+        "homepage": "Homepage",
+        "none": "Initialen",
         "pending": "Noch nicht geladen"
+      },
+      "problem": {
+        "noHomepage": "In Kimai ist für diesen Kunden keine Homepage hinterlegt.",
+        "invalidHomepage": "Die Homepage ist keine öffentliche https-Adresse.",
+        "unreachable": "Die Homepage war nicht erreichbar.",
+        "httpStatus": "Die Homepage hat mit Fehler {{detail}} geantwortet.",
+        "noIcon": "Auf der Homepage wurde kein verwendbares Icon gefunden.",
+        "lookupFailed": "Die Homepage konnte nicht aus Kimai gelesen werden."
       }
     },
     "quick": {

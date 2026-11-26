@@ -3,13 +3,14 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { KimaiClient } from "../../api/kimaiClient";
+import type { HomepageLookup } from "./customerHomepage";
 import type { LogoChange, LogoEntry } from "./logoApi";
 
 const mocks = vi.hoisted(() => ({
   listLogos: vi.fn(),
   fetchLogo: vi.fn(),
   onLogoChange: vi.fn(),
-  getCustomerHomepage: vi.fn(),
+  lookup: vi.fn(),
   loggerError: vi.fn(),
   loggerDebug: vi.fn(),
 }));
@@ -18,20 +19,29 @@ vi.mock("./logoApi", () => ({
   fetchLogo: mocks.fetchLogo,
   onLogoChange: mocks.onLogoChange,
 }));
-vi.mock("./customerHomepage", () => ({ getCustomerHomepage: mocks.getCustomerHomepage }));
+vi.mock("./customerHomepage", () => ({ lookupCustomerHomepage: mocks.lookup }));
 vi.mock("../../utils/logger", () => ({
   logger: { error: mocks.loggerError, debug: mocks.loggerDebug },
 }));
 
 import { needsLogoFetch, useCustomerLogos } from "./useCustomerLogos";
 
+const NOW = 1_800_000_000;
+
+function site(id: number): string {
+  return `https://site${id}.example`;
+}
+
 function entry(customerId: number, overrides: Partial<LogoEntry> = {}): LogoEntry {
   return {
     customerId,
     source: "homepage",
     dataUrl: `data:image/png;base64,${customerId}`,
-    stale: false,
+    expiresAt: NOW + 3600,
     triedLogoDev: false,
+    homepage: site(customerId),
+    problem: null,
+    detail: null,
     ...overrides,
   };
 }
@@ -40,30 +50,59 @@ function client(connectionId = "conn", cacheScope = `${connectionId}:1`): KimaiC
   return { connectionId, cacheScope } as unknown as KimaiClient;
 }
 
+/** Homepages as Kimai reports them: `site<id>.example` unless overridden. */
+function homepagesFor(
+  ids: number[],
+  overrides: Record<number, Partial<HomepageLookup>> = {},
+): Map<number, HomepageLookup> {
+  return new Map(
+    ids.map((id) => [id, { homepage: site(id), failed: false, ...overrides[id] }]),
+  );
+}
+
 let emitChange: (change: LogoChange) => void;
 let unlisten: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers({ now: NOW * 1000, shouldAdvanceTime: true });
   unlisten = vi.fn();
   mocks.listLogos.mockResolvedValue([]);
   mocks.onLogoChange.mockImplementation(async (callback: (change: LogoChange) => void) => {
     emitChange = callback;
     return unlisten;
   });
-  mocks.getCustomerHomepage.mockImplementation(async (_client, id: number) => `site${id}.example`);
-  mocks.fetchLogo.mockImplementation(async ({ customerId }) => entry(customerId));
+  mocks.lookup.mockImplementation(async (_client, id: number) => ({ homepage: site(id), failed: false }));
+  mocks.fetchLogo.mockImplementation(async ({ customerId, homepage }) =>
+    entry(customerId, { homepage }),
+  );
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("needsLogoFetch", () => {
-  it("fetches unknown, expired and not-yet-asked logos, but never manual ones", () => {
-    expect(needsLogoFetch(undefined, false)).toBe(true);
-    expect(needsLogoFetch(entry(1), false)).toBe(false);
-    expect(needsLogoFetch(entry(1, { stale: true }), false)).toBe(true);
-    expect(needsLogoFetch(entry(1), true)).toBe(true);
-    expect(needsLogoFetch(entry(1, { triedLogoDev: true }), true)).toBe(false);
-    expect(needsLogoFetch(entry(1, { source: "manual", stale: true }), true)).toBe(false);
+  it("fetches what is unknown, expired or not yet asked at logo.dev", () => {
+    expect(needsLogoFetch(undefined, site(1), false, NOW)).toBe(true);
+    expect(needsLogoFetch(entry(1), site(1), false, NOW)).toBe(false);
+    expect(needsLogoFetch(entry(1), site(1), false, NOW + 3600)).toBe(true);
+    expect(needsLogoFetch(entry(1), site(1), true, NOW)).toBe(true);
+    expect(needsLogoFetch(entry(1, { triedLogoDev: true }), site(1), true, NOW)).toBe(false);
+  });
+
+  it("fetches at once when the homepage in Kimai changed", () => {
+    const miss = entry(1, { source: "none", dataUrl: null, homepage: null, problem: "noHomepage" });
+    expect(needsLogoFetch(miss, null, false, NOW)).toBe(false);
+    // The bug report: the homepage is entered after the first lookup.
+    expect(needsLogoFetch(miss, "https://dusw.de", false, NOW)).toBe(true);
+    expect(needsLogoFetch(entry(1), "https://other.example", false, NOW)).toBe(true);
+    expect(needsLogoFetch(entry(1), null, false, NOW)).toBe(true);
+  });
+
+  it("never replaces a manual logo", () => {
+    const manual = entry(1, { source: "manual", expiresAt: null, homepage: null });
+    expect(needsLogoFetch(manual, "https://dusw.de", true, NOW + 10 ** 9)).toBe(false);
   });
 });
 
@@ -99,7 +138,7 @@ describe("useCustomerLogos", () => {
       { initialProps: { connectionId: "" } },
     );
     expect(mocks.listLogos).not.toHaveBeenCalled();
-    // Events are ignored until the connection's cache has been read.
+    // Changes are ignored until the connection's cache has been read.
     act(() => result.current.apply(1, entry(1)));
     expect(result.current.entries.size).toBe(0);
 
@@ -112,7 +151,7 @@ describe("useCustomerLogos", () => {
     );
     expect(result.current.entries.size).toBe(0);
     await act(() => result.current.reload(1));
-    expect(mocks.fetchLogo).not.toHaveBeenCalled();
+    expect(mocks.lookup).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -138,52 +177,143 @@ describe("useCustomerLogos", () => {
     expect(mocks.loggerError).not.toHaveBeenCalled();
   });
 
-  it("fetches missing logos one after another in the background", async () => {
-    mocks.listLogos.mockResolvedValue([entry(1), entry(3, { stale: true })]);
-    mocks.fetchLogo.mockImplementation(async ({ customerId }) => {
+  it("fetches missing and expired logos with the homepage Kimai reports", async () => {
+    mocks.listLogos.mockResolvedValue([entry(1), entry(3, { expiresAt: NOW - 1 })]);
+    mocks.fetchLogo.mockImplementation(async ({ customerId, homepage }) => {
       if (customerId === 2) throw new Error("offline");
-      return entry(customerId, { triedLogoDev: true });
+      return entry(customerId, { homepage });
     });
     const active = client();
-    const { result, rerender } = renderHook(
-      ({ customerIds }) =>
-        useCustomerLogos({ ...base, customerIds, client: active, autoFetch: true }),
-      { initialProps: { customerIds: [3, 1, 2] } },
+    const { result } = renderHook(() =>
+      useCustomerLogos({
+        ...base,
+        customerIds: [3, 1, 2, 4, 5],
+        client: active,
+        autoFetch: true,
+        // Kimai could not be asked about 4, and 5 is not in the answer at all.
+        homepages: homepagesFor([1, 2, 3, 4], { 4: { failed: true } }),
+      }),
     );
     await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(2));
     expect(mocks.fetchLogo.mock.calls.map(([request]) => request.customerId)).toEqual([2, 3]);
     expect(mocks.fetchLogo).toHaveBeenCalledWith({
       connectionId: "conn",
       customerId: 3,
-      homepage: "site3.example",
+      homepage: site(3),
       logoDevToken: null,
       force: false,
     });
-    expect(mocks.getCustomerHomepage).toHaveBeenCalledWith(active, 3);
     expect(mocks.loggerDebug).toHaveBeenCalledWith(
       "Logo fetch failed for customer 2: Error: offline",
     );
-    await waitFor(() => expect(result.current.entries.get(3)?.stale).toBe(false));
+    await waitFor(() => expect(result.current.entries.get(3)?.expiresAt).toBe(NOW + 3600));
+    // The homepage is not read a second time for the background fetch.
+    expect(mocks.lookup).not.toHaveBeenCalled();
+  });
 
-    // The failed customer is not retried within the session, new ones are.
-    rerender({ customerIds: [3, 1, 2, 4] });
-    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(3));
-    expect(mocks.fetchLogo.mock.calls[2]![0].customerId).toBe(4);
-    rerender({ customerIds: [3, 1, 2, 4] });
-    expect(mocks.fetchLogo).toHaveBeenCalledTimes(3);
+  it("waits for the homepages and for the cache before fetching anything", async () => {
+    const active = client();
+    const { rerender } = renderHook(
+      ({ homepages }: { homepages?: Map<number, HomepageLookup> }) =>
+        useCustomerLogos({ ...base, customerIds: [1], client: active, autoFetch: true, homepages }),
+      { initialProps: {} },
+    );
+    await waitFor(() => expect(mocks.listLogos).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(mocks.fetchLogo).not.toHaveBeenCalled();
+    rerender({ homepages: homepagesFor([1]) });
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(1));
+  });
+
+  it("fetches again at once when a homepage is entered or changed in Kimai", async () => {
+    mocks.listLogos.mockResolvedValue([
+      entry(1, { source: "none", dataUrl: null, homepage: null, problem: "noHomepage" }),
+    ]);
+    const active = client();
+    const { result, rerender } = renderHook(
+      ({ homepages, updatedAt }: { homepages: Map<number, HomepageLookup>; updatedAt: number }) =>
+        useCustomerLogos({
+          ...base, customerIds: [1], client: active, autoFetch: true,
+          homepages, homepagesUpdatedAt: updatedAt,
+        }),
+      { initialProps: { homepages: homepagesFor([1], { 1: { homepage: null } }), updatedAt: 1 } },
+    );
+    await waitFor(() => expect(result.current.entries.size).toBe(1));
+    await act(async () => undefined);
+    expect(mocks.fetchLogo).not.toHaveBeenCalled();
+
+    rerender({ homepages: homepagesFor([1], { 1: { homepage: "https://dusw.de" } }), updatedAt: 2 });
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchLogo.mock.calls[0]![0]).toMatchObject({ customerId: 1, homepage: "https://dusw.de" });
+    await waitFor(() => expect(result.current.entries.get(1)?.homepage).toBe("https://dusw.de"));
+
+    rerender({ homepages: homepagesFor([1], { 1: { homepage: "https://www.dusw.de" } }), updatedAt: 3 });
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(2));
+    expect(mocks.fetchLogo.mock.calls[1]![0].homepage).toBe("https://www.dusw.de");
+  });
+
+  it("repeats a lookup without result after an hour, not on every refresh", async () => {
+    const miss = (expiresAt: number) =>
+      entry(1, { source: "none", dataUrl: null, problem: "noIcon", expiresAt });
+    mocks.listLogos.mockResolvedValue([miss(NOW + 3600)]);
+    mocks.fetchLogo.mockImplementation(async () => miss(Math.floor(Date.now() / 1000) + 3600));
+    const active = client();
+    const homepages = homepagesFor([1]);
+    const { result, rerender } = renderHook(
+      ({ updatedAt }: { updatedAt: number }) =>
+        useCustomerLogos({
+          ...base, customerIds: [1], client: active, autoFetch: true,
+          homepages, homepagesUpdatedAt: updatedAt,
+        }),
+      { initialProps: { updatedAt: 1 } },
+    );
+    await waitFor(() => expect(result.current.entries.size).toBe(1));
+    // Homepages are re-read every few minutes; a fresh miss stays as it is.
+    await act(() => vi.advanceTimersByTimeAsync(30 * 60_000));
+    rerender({ updatedAt: 2 });
+    await act(async () => undefined);
+    expect(mocks.fetchLogo).not.toHaveBeenCalled();
+
+    await act(() => vi.advanceTimersByTimeAsync(31 * 60_000));
+    rerender({ updatedAt: 3 });
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not hammer a lookup that keeps failing", async () => {
+    mocks.fetchLogo.mockRejectedValue(new Error("offline"));
+    const active = client();
+    const homepages = homepagesFor([1]);
+    const { rerender } = renderHook(
+      ({ updatedAt }: { updatedAt: number }) =>
+        useCustomerLogos({
+          ...base, customerIds: [1], client: active, autoFetch: true,
+          homepages, homepagesUpdatedAt: updatedAt,
+        }),
+      { initialProps: { updatedAt: 1 } },
+    );
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(1));
+    await act(() => vi.advanceTimersByTimeAsync(5 * 60_000));
+    rerender({ updatedAt: 2 });
+    await act(async () => undefined);
+    expect(mocks.fetchLogo).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(6 * 60_000));
+    rerender({ updatedAt: 3 });
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(2));
   });
 
   it("asks logo.dev again once a key is added or corrected", async () => {
     mocks.listLogos.mockResolvedValue([entry(1)]);
     const active = client();
+    const homepages = homepagesFor([1]);
     const { rerender } = renderHook(
       ({ logoDevToken }) =>
         useCustomerLogos({
-          ...base, customerIds: [1], client: active, autoFetch: true, logoDevToken,
+          ...base, customerIds: [1], client: active, autoFetch: true, logoDevToken, homepages,
         }),
       { initialProps: { logoDevToken: "" } },
     );
     await waitFor(() => expect(mocks.listLogos).toHaveBeenCalled());
+    await act(async () => undefined);
     expect(mocks.fetchLogo).not.toHaveBeenCalled();
 
     rerender({ logoDevToken: "pk_wrong" });
@@ -195,10 +325,10 @@ describe("useCustomerLogos", () => {
   });
 
   it("does not fetch for another connection's client and stops when the list changes", async () => {
-    mocks.listLogos.mockResolvedValue([]);
+    const homepages = homepagesFor([1, 2]);
     const { rerender } = renderHook(
       ({ active, customerIds }) =>
-        useCustomerLogos({ ...base, customerIds, client: active, autoFetch: true }),
+        useCustomerLogos({ ...base, customerIds, client: active, autoFetch: true, homepages }),
       { initialProps: { active: client("other"), customerIds: [1, 2] as number[] } },
     );
     await waitFor(() => expect(mocks.listLogos).toHaveBeenCalled());
@@ -206,50 +336,65 @@ describe("useCustomerLogos", () => {
     expect(mocks.fetchLogo).not.toHaveBeenCalled();
 
     let releaseFirst: () => void = () => undefined;
-    mocks.getCustomerHomepage.mockImplementationOnce(
-      () => new Promise<string>((resolve) => { releaseFirst = () => resolve("first.example"); }),
+    mocks.fetchLogo.mockImplementationOnce(
+      () => new Promise<LogoEntry>((resolve) => { releaseFirst = () => resolve(entry(1)); }),
     );
     rerender({ active: client(), customerIds: [1, 2] });
-    await waitFor(() => expect(mocks.getCustomerHomepage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(1));
     rerender({ active: client(), customerIds: [] });
     await act(async () => releaseFirst());
     expect(mocks.fetchLogo).toHaveBeenCalledTimes(1);
-    expect(mocks.fetchLogo.mock.calls[0]![0].customerId).toBe(1);
   });
 
   it("stops the background queue when the connection changes", async () => {
     let releaseFirst: () => void = () => undefined;
-    mocks.getCustomerHomepage.mockImplementationOnce(
-      () => new Promise<string>((resolve) => { releaseFirst = () => resolve("first.example"); }),
+    mocks.fetchLogo.mockImplementationOnce(
+      () => new Promise<LogoEntry>((resolve) => { releaseFirst = () => resolve(entry(1)); }),
     );
+    const homepages = homepagesFor([1, 2]);
     const { rerender } = renderHook(
       ({ connectionId }) =>
         useCustomerLogos({
-          ...base, connectionId, customerIds: [1, 2], client: client("conn"), autoFetch: true,
+          ...base, connectionId, customerIds: [1, 2], client: client("conn"), autoFetch: true, homepages,
         }),
       { initialProps: { connectionId: "conn" } },
     );
-    await waitFor(() => expect(mocks.getCustomerHomepage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.fetchLogo).toHaveBeenCalledTimes(1));
     rerender({ connectionId: "next" });
     await act(async () => releaseFirst());
     expect(mocks.fetchLogo).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads a single logo on request, ignoring the cache", async () => {
+  it("reloads a single logo with a fresh homepage from Kimai, ignoring the cache", async () => {
     mocks.listLogos.mockResolvedValue([entry(1)]);
-    mocks.fetchLogo.mockResolvedValue(entry(1, { source: "logodev" }));
+    mocks.lookup.mockResolvedValue({ homepage: "https://dusw.de", failed: false });
+    mocks.fetchLogo.mockResolvedValue(entry(1, { source: "logodev", homepage: "https://dusw.de" }));
+    const onHomepageLookup = vi.fn();
+    const active = client();
     const { result } = renderHook(() =>
-      useCustomerLogos({ ...base, client: client(), logoDevToken: "pk_live" }),
+      useCustomerLogos({ ...base, client: active, logoDevToken: "pk_live", onHomepageLookup }),
     );
     await waitFor(() => expect(result.current.entries.size).toBe(1));
     await act(() => result.current.reload(1));
+    expect(mocks.lookup).toHaveBeenCalledWith(active, 1);
+    expect(onHomepageLookup).toHaveBeenCalledWith(1, { homepage: "https://dusw.de", failed: false });
     expect(mocks.fetchLogo).toHaveBeenCalledWith({
       connectionId: "conn",
       customerId: 1,
-      homepage: "site1.example",
+      homepage: "https://dusw.de",
       logoDevToken: "pk_live",
       force: true,
     });
     expect(result.current.entries.get(1)?.source).toBe("logodev");
+  });
+
+  it("fails a reload when Kimai cannot be asked for the homepage", async () => {
+    mocks.lookup.mockResolvedValue({ homepage: null, failed: true });
+    const { result } = renderHook(() => useCustomerLogos({ ...base, client: client() }));
+    await waitFor(() => expect(mocks.listLogos).toHaveBeenCalled());
+    await expect(result.current.reload(1)).rejects.toThrow(
+      "The homepage could not be read from Kimai",
+    );
+    expect(mocks.fetchLogo).not.toHaveBeenCalled();
   });
 });

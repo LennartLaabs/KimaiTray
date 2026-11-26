@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   getProjects: vi.fn(),
   getCustomers: vi.fn(),
   useCustomerLogos: vi.fn(),
+  useCustomerHomepages: vi.fn(),
+  homepages: { lookups: undefined as unknown, updatedAt: 0, refreshIfStale: vi.fn(), remember: vi.fn() },
+  onFocusChanged: vi.fn(),
 }));
 vi.mock("../hooks/useKimaiClient", () => ({ useKimaiClient: () => mocks.kimai }));
 vi.mock("./settings/useAdversumSettings", () => ({
@@ -26,6 +29,12 @@ vi.mock("../api/projectApi", () => ({
   getCustomers: mocks.getCustomers,
 }));
 vi.mock("./logos/useCustomerLogos", () => ({ useCustomerLogos: mocks.useCustomerLogos }));
+vi.mock("./logos/useCustomerHomepages", () => ({
+  useCustomerHomepages: mocks.useCustomerHomepages,
+}));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onFocusChanged: mocks.onFocusChanged }),
+}));
 
 import AdversumBridge from "./AdversumBridge";
 import { getAdversumDisplay, setAdversumDisplay } from "./display/displayStore";
@@ -54,6 +63,14 @@ beforeEach(() => {
     { id: 14, name: "Other", customer: 9 },
     { id: 15, name: "Orphan", customer: 404 },
   ]);
+  mocks.homepages = {
+    lookups: new Map([[7, { homepage: "https://dusw.de", failed: false }]]),
+    updatedAt: 42,
+    refreshIfStale: vi.fn(),
+    remember: vi.fn(),
+  };
+  mocks.useCustomerHomepages.mockImplementation(() => mocks.homepages);
+  mocks.onFocusChanged.mockResolvedValue(vi.fn());
   mocks.useCustomerLogos.mockReturnValue({
     entries: new Map([
       [7, { customerId: 7, source: "homepage", dataUrl: "data:image/png;base64,AAAA" }],
@@ -84,7 +101,10 @@ describe("AdversumBridge", () => {
       customerIds: [7, 8, 9],
       logoDevToken: "pk_x",
       autoFetch: true,
+      homepages: mocks.homepages.lookups,
+      homepagesUpdatedAt: 42,
     });
+    expect(mocks.useCustomerHomepages).toHaveBeenLastCalledWith(mocks.kimai.client, true, [7, 8, 9]);
     unmount();
     expect(getAdversumDisplay()).toBeNull();
   });
@@ -93,6 +113,9 @@ describe("AdversumBridge", () => {
     const first = render(<AdversumBridge windowLabel="timer-reminder" />, { wrapper });
     await waitFor(() => expect(getAdversumDisplay()).not.toBeNull());
     expect(mocks.useCustomerLogos.mock.lastCall![0].autoFetch).toBe(false);
+    // Windows that do not fetch do not read homepages or watch their focus.
+    expect(mocks.useCustomerHomepages.mock.lastCall![1]).toBe(false);
+    expect(mocks.onFocusChanged).not.toHaveBeenCalled();
     first.unmount();
 
     mocks.settings = {
@@ -102,6 +125,30 @@ describe("AdversumBridge", () => {
     render(<AdversumBridge windowLabel="tray-popup" />, { wrapper });
     await waitFor(() => expect(getAdversumDisplay()?.indicator).toBe("dots"));
     expect(mocks.useCustomerLogos.mock.lastCall![0].autoFetch).toBe(false);
+  });
+
+  it("reads the homepages again when the popup gets the focus", async () => {
+    let focus: (event: { payload: boolean }) => void = () => undefined;
+    const unlisten = vi.fn();
+    mocks.onFocusChanged.mockImplementation(async (handler: typeof focus) => {
+      focus = handler;
+      return unlisten;
+    });
+    const { unmount } = render(<AdversumBridge windowLabel="tray-popup" />, { wrapper });
+    await waitFor(() => expect(mocks.onFocusChanged).toHaveBeenCalled());
+    focus({ payload: false });
+    expect(mocks.homepages.refreshIfStale).not.toHaveBeenCalled();
+    focus({ payload: true });
+    expect(mocks.homepages.refreshIfStale).toHaveBeenCalledTimes(1);
+    unmount();
+    await waitFor(() => expect(unlisten).toHaveBeenCalled());
+  });
+
+  it("survives a window without focus events", async () => {
+    mocks.onFocusChanged.mockRejectedValue(new Error("no events"));
+    const { unmount } = render(<AdversumBridge windowLabel="tray-popup" />, { wrapper });
+    await waitFor(() => expect(getAdversumDisplay()).not.toBeNull());
+    expect(() => unmount()).not.toThrow();
   });
 
   it("waits for the fork settings and for a configured connection", async () => {

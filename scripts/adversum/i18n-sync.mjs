@@ -6,7 +6,11 @@
 // missing there, and drops keys that no longer exist in English. Existing
 // translations in those files are kept.
 //
-// Usage: node scripts/adversum/i18n-sync.mjs
+// Usage: node scripts/adversum/i18n-sync.mjs [--overwrite]
+//
+// `--overwrite` replaces the whole namespace in those four files with the
+// English text. Use it after changing the wording of an existing English key,
+// which would otherwise keep its old copy there.
 import { readFileSync, writeFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -22,9 +26,11 @@ function read(lang) {
   return JSON.parse(readFileSync(resolve(localesDir, `${lang}.json`), "utf-8"));
 }
 
+const overwrite = process.argv.includes("--overwrite");
+
 function syncNode(reference, current) {
   if (typeof reference !== "object" || reference === null) {
-    return typeof current === "string" ? current : reference;
+    return typeof current === "string" && !overwrite ? current : reference;
   }
   const source =
     typeof current === "object" && current !== null ? current : {};

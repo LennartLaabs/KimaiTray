@@ -99,15 +99,19 @@ const FETCHED_LOGOS: Record<number, { source: string; dataUrl: string }> = {
 };
 
 function logoEntry(customerId: number): Args {
+  const homepage = customers.find((customer) => customer.id === customerId)?.homepage.trim() || null;
   const manual = readStore().manualLogos?.[customerId];
-  if (manual) return { customerId, source: "manual", dataUrl: manual, stale: false, triedLogoDev: true };
+  const base = { customerId, stale: false, triedLogoDev: true, homepage, problem: null, detail: null };
+  if (manual) return { ...base, source: "manual", dataUrl: manual, expiresAt: null };
   const fetched = FETCHED_LOGOS[customerId];
+  const hour = Math.floor(Date.now() / 1000) + 3600;
+  if (fetched) return { ...base, source: fetched.source, dataUrl: fetched.dataUrl, expiresAt: hour + 30 * 86400 };
   return {
-    customerId,
-    source: fetched?.source ?? "none",
-    dataUrl: fetched?.dataUrl ?? null,
-    stale: false,
-    triedLogoDev: true,
+    ...base,
+    source: "none",
+    dataUrl: null,
+    expiresAt: hour,
+    problem: homepage ? "noIcon" : "noHomepage",
   };
 }
 

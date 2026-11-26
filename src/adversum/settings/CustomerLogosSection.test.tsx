@@ -13,19 +13,26 @@ const mocks = vi.hoisted(() => ({
   getCustomers: vi.fn(),
   logos: { entries: new Map<number, unknown>(), reload: vi.fn(), apply: vi.fn() },
   useCustomerLogos: vi.fn(),
+  homepages: { lookups: undefined as unknown, updatedAt: 0, refreshIfStale: vi.fn(), remember: vi.fn() },
+  useCustomerHomepages: vi.fn(),
   setManualLogo: vi.fn(),
   clearManualLogo: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { customer?: string }) =>
-      options?.customer ? `${key}:${options.customer}` : key,
+    t: (key: string, options?: { customer?: string; detail?: string }) => {
+      const value = options?.customer ?? options?.detail;
+      return value ? `${key}:${value}` : key;
+    },
   }),
 }));
 vi.mock("../../hooks/useKimaiClient", () => ({ useKimaiClient: () => mocks.kimai }));
 vi.mock("./useAdversumSettings", () => ({ useAdversumSettings: () => mocks.settings }));
 vi.mock("../../api/projectApi", () => ({ getCustomers: mocks.getCustomers }));
 vi.mock("../logos/useCustomerLogos", () => ({ useCustomerLogos: mocks.useCustomerLogos }));
+vi.mock("../logos/useCustomerHomepages", () => ({
+  useCustomerHomepages: mocks.useCustomerHomepages,
+}));
 vi.mock("../logos/logoApi", () => ({
   setManualLogo: mocks.setManualLogo,
   clearManualLogo: mocks.clearManualLogo,
@@ -35,13 +42,21 @@ vi.mock("../../platform", () => ({ currentPlatform: () => ({ os: "macos" }) }));
 import CustomerLogosSection from "./CustomerLogosSection";
 import { LogoFileError } from "../logos/encodeImage";
 
-function entry(customerId: number, source: LogoEntry["source"]): LogoEntry {
+function entry(
+  customerId: number,
+  source: LogoEntry["source"],
+  overrides: Partial<LogoEntry> = {},
+): LogoEntry {
   return {
     customerId,
     source,
     dataUrl: source === "none" ? null : `data:image/png;base64,${customerId}`,
-    stale: false,
+    expiresAt: source === "manual" ? null : 1_800_000_000,
     triedLogoDev: false,
+    homepage: null,
+    problem: null,
+    detail: null,
+    ...overrides,
   };
 }
 
@@ -81,6 +96,16 @@ beforeEach(() => {
     apply: vi.fn(),
   };
   mocks.useCustomerLogos.mockImplementation(() => mocks.logos);
+  mocks.homepages = {
+    lookups: new Map([
+      [7, { homepage: "https://dusw.de", failed: false }],
+      [8, { homepage: null, failed: false }],
+    ]),
+    updatedAt: 1,
+    refreshIfStale: vi.fn(),
+    remember: vi.fn(),
+  };
+  mocks.useCustomerHomepages.mockImplementation(() => mocks.homepages);
   encodeImage.mockResolvedValue("QUJD");
   mocks.setManualLogo.mockResolvedValue(entry(8, "manual"));
   mocks.clearManualLogo.mockResolvedValue(null);
@@ -92,7 +117,7 @@ describe("CustomerLogosSection", () => {
     await renderSection();
     const names = screen.getAllByTestId(/^customer-logo-/).map((item) => item.dataset.testid);
     expect(names).toEqual(["customer-logo-7", "customer-logo-8", "customer-logo-9"]);
-    expect(row(7).getByText("adversum.logos.source.manual")).toBeTruthy();
+    expect(row(7).getByText("adversum.logos.source.manual · https://dusw.de")).toBeTruthy();
     expect(row(8).getByText("adversum.logos.source.none")).toBeTruthy();
     expect(row(9).getByText("adversum.logos.source.pending")).toBeTruthy();
     expect(row(7).getByText("adversum.logos.reset")).toBeTruthy();
@@ -103,7 +128,39 @@ describe("CustomerLogosSection", () => {
       customerIds: [7, 8, 9],
       logoDevToken: "",
       autoFetch: false,
+      onHomepageLookup: mocks.homepages.remember,
     });
+    expect(mocks.useCustomerHomepages).toHaveBeenLastCalledWith(mocks.kimai.client, true, [7, 8, 9]);
+  });
+
+  it("shows the homepage in use and why a customer has no logo", async () => {
+    mocks.logos.entries = new Map([
+      [7, entry(7, "homepage", { homepage: "https://old.example" })],
+      [8, entry(8, "none", { problem: "httpStatus", detail: "503", homepage: "https://hero.example" })],
+      [9, entry(9, "none", { problem: "noHomepage" })],
+    ]);
+    mocks.homepages.lookups = new Map([
+      [7, { homepage: "https://dusw.de", failed: false }],
+      [9, { homepage: null, failed: false }],
+    ]);
+    await renderSection();
+    const problemOf = (id: number) =>
+      screen.getByTestId(`customer-logo-${id}`).querySelector("[data-logo-problem]");
+    // Kimai's current homepage wins over the one the cached logo was found with.
+    expect(row(7).getByText("adversum.logos.source.homepage · https://dusw.de")).toBeTruthy();
+    expect(problemOf(7)).toBeNull();
+    // Without a live answer the homepage of the cached result is shown.
+    expect(row(8).getByText("adversum.logos.source.none · https://hero.example")).toBeTruthy();
+    expect(problemOf(8)?.textContent).toBe("adversum.logos.problem.httpStatus:503");
+    expect(problemOf(8)?.className).toContain("amber");
+    expect(row(9).getByText("adversum.logos.source.none")).toBeTruthy();
+    expect(problemOf(9)?.textContent).toBe("adversum.logos.problem.noHomepage");
+  });
+
+  it("says so when Kimai cannot be asked for a homepage", async () => {
+    mocks.homepages.lookups = new Map([[8, { homepage: null, failed: true }]]);
+    await renderSection();
+    expect(row(8).getByText("adversum.logos.problem.lookupFailed")).toBeTruthy();
   });
 
   it("switches the customer indicator", async () => {

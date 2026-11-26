@@ -3,16 +3,29 @@ import { listen } from "@tauri-apps/api/event";
 
 export type LogoSource = "manual" | "logodev" | "homepage" | "none";
 
+/** Why a lookup found no logo. */
+export type LogoProblem =
+  | "noHomepage"
+  | "invalidHomepage"
+  | "unreachable"
+  | "httpStatus"
+  | "noIcon";
+
 /** One customer's cached logo state, as kept by `src-tauri/src/adversum/logos.rs`. */
 export interface LogoEntry {
   customerId: number;
   source: LogoSource;
   /** `data:image/png;base64,…`, or `null` when no logo was found. */
   dataUrl: string | null;
-  /** Older than its cache lifetime; worth fetching again. */
-  stale: boolean;
+  /** Unix time in seconds at which the result expires; `null` for manual logos. */
+  expiresAt: number | null;
   /** Whether logo.dev was already asked for this result. */
   triedLogoDev: boolean;
+  /** The Kimai homepage the result was looked up for. */
+  homepage: string | null;
+  problem: LogoProblem | null;
+  /** Detail for `problem`, such as the HTTP status. */
+  detail: string | null;
 }
 
 export interface LogoChange {

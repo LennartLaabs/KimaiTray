@@ -14,7 +14,9 @@ import {
 } from "../../settings/SettingsLayout";
 import CustomerAvatar from "../logos/CustomerAvatar";
 import { fileToLogoPngBase64, LogoFileError } from "../logos/encodeImage";
+import type { HomepageLookup } from "../logos/customerHomepage";
 import { clearManualLogo, setManualLogo, type LogoEntry } from "../logos/logoApi";
+import { useCustomerHomepages } from "../logos/useCustomerHomepages";
 import { useCustomerLogos } from "../logos/useCustomerLogos";
 import type { CustomerIndicator } from "./adversumSettings";
 import { useAdversumSettings } from "./useAdversumSettings";
@@ -50,12 +52,14 @@ export default function CustomerLogosSection({
   );
   const customerIds = useMemo(() => customers.map((customer) => customer.id), [customers]);
 
+  const homepages = useCustomerHomepages(client, enabled, customerIds);
   const { entries, reload, apply } = useCustomerLogos({
     client,
     connectionId: activeConnectionId,
     customerIds,
     logoDevToken: settings.logoDevToken,
     autoFetch: false,
+    onHomepageLookup: homepages.remember,
   });
 
   const [tokenDraft, setTokenDraft] = useState(settings.logoDevToken);
@@ -186,6 +190,7 @@ export default function CustomerLogosSection({
               key={customer.id}
               customer={customer}
               entry={entries.get(customer.id)}
+              lookup={homepages.lookups?.get(customer.id)}
               busy={busyIds.includes(customer.id)}
               isDropTarget={dropTargetId === customer.id}
               failureKey={failures[customer.id] ?? null}
@@ -204,6 +209,8 @@ export default function CustomerLogosSection({
 interface CustomerLogoRowProps {
   customer: KimaiCustomer;
   entry: LogoEntry | undefined;
+  /** The customer's homepage as Kimai reports it right now. */
+  lookup: HomepageLookup | undefined;
   busy: boolean;
   isDropTarget: boolean;
   failureKey: string | null;
@@ -216,6 +223,7 @@ interface CustomerLogoRowProps {
 function CustomerLogoRow({
   customer,
   entry,
+  lookup,
   busy,
   isDropTarget,
   failureKey,
@@ -226,6 +234,17 @@ function CustomerLogoRow({
 }: CustomerLogoRowProps) {
   const { t } = useTranslation();
   const fileInput = useRef<HTMLInputElement>(null);
+
+  const homepage = lookup?.homepage ?? entry?.homepage ?? null;
+  // Why there is no logo: an action that just failed, Kimai not answering,
+  // or the reason the last lookup recorded.
+  const problem = failureKey
+    ? t(failureKey)
+    : lookup?.failed
+      ? t("adversum.logos.problem.lookupFailed")
+      : entry?.source === "none" && entry.problem
+        ? t(`adversum.logos.problem.${entry.problem}`, { detail: entry.detail ?? "" })
+        : null;
 
   const allowDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -258,13 +277,22 @@ function CustomerLogoRow({
         <div className="truncate text-[13px] font-medium text-[var(--s-fg)]">
           {customer.name}
         </div>
-        <div
-          className={`text-[11.5px] ${
-            failureKey ? "text-red-500 dark:text-red-400" : "text-[var(--s-fg-subtle)]"
-          }`}
-        >
-          {failureKey ? t(failureKey) : t(sourceLabelKey(entry))}
+        <div className="truncate text-[11.5px] text-[var(--s-fg-subtle)]" data-logo-source>
+          {t(sourceLabelKey(entry))}
+          {homepage && ` · ${homepage}`}
         </div>
+        {problem && (
+          <div
+            data-logo-problem
+            className={`text-[11.5px] ${
+              failureKey
+                ? "text-red-500 dark:text-red-400"
+                : "text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            {problem}
+          </div>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <input

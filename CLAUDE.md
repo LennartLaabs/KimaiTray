@@ -47,7 +47,7 @@ All through `./scripts/adversum/env.sh …` (or after sourcing it):
 | Full frontend gate (version, i18n, lint, tests + coverage, build) | `npm run check` |
 | Tests only | `npm test` / `npx vitest run src/adversum` |
 | i18n key parity | `npm run i18n:check` |
-| Copy new `adversum.*` keys from `en` to sk/cs/uk/es | `node scripts/adversum/i18n-sync.mjs` |
+| Copy new `adversum.*` keys from `en` to sk/cs/uk/es (`--overwrite` after rewording an existing English text) | `node scripts/adversum/i18n-sync.mjs` |
 | Rust format / lint / tests (in `src-tauri/`) | `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` |
 | Release build (.app and .dmg) | `npm run tauri build` |
 

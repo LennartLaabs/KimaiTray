@@ -1,11 +1,13 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCustomers, getProjects } from "../api/projectApi";
 import { useKimaiClient } from "../hooks/useKimaiClient";
 import {
   setAdversumDisplay,
   type DisplayCustomer,
 } from "./display/displayStore";
+import { useCustomerHomepages } from "./logos/useCustomerHomepages";
 import { useCustomerLogos } from "./logos/useCustomerLogos";
 import { useAdversumSettings } from "./settings/useAdversumSettings";
 
@@ -45,14 +47,32 @@ export default function AdversumBridge({ windowLabel }: AdversumBridgeProps) {
     () => (customersQ.data ?? []).map((customer) => customer.id),
     [customersQ.data],
   );
+  // Only the long-lived tray window fetches; other windows read the cache.
+  const autoFetch = windowLabel === "tray-popup" && settings.customerIndicator === "logo";
+  const homepages = useCustomerHomepages(client, enabled && autoFetch, customerIds);
   const { entries } = useCustomerLogos({
     client,
     connectionId: activeConnectionId,
     customerIds,
     logoDevToken: settings.logoDevToken,
-    // Only the long-lived tray window fetches; other windows read the cache.
-    autoFetch: windowLabel === "tray-popup" && settings.customerIndicator === "logo",
+    autoFetch,
+    homepages: homepages.lookups,
+    homepagesUpdatedAt: homepages.updatedAt,
   });
+
+  // Opening the popup is the moment a homepage just entered in Kimai should
+  // show up, so the homepages are read again then.
+  const { refreshIfStale } = homepages;
+  useEffect(() => {
+    if (!autoFetch) return;
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) refreshIfStale();
+    });
+    unlisten.catch(() => undefined);
+    return () => {
+      void unlisten.then((cleanup) => cleanup()).catch(() => undefined);
+    };
+  }, [autoFetch, refreshIfStale]);
 
   const customersByProject = useMemo(() => {
     const customers = new Map<number, DisplayCustomer>(

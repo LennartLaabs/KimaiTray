@@ -1,15 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { KimaiClient } from "../../api/kimaiClient";
-import { getCustomerHomepage } from "./customerHomepage";
+import { lookupCustomerHomepage } from "./customerHomepage";
 
 function clientReturning(value: unknown): KimaiClient {
   return { get: vi.fn().mockResolvedValue(value) } as unknown as KimaiClient;
 }
 
-describe("getCustomerHomepage", () => {
+describe("lookupCustomerHomepage", () => {
   it("reads the homepage from the customer detail endpoint", async () => {
-    const client = clientReturning({ id: 7, name: "DUSW", homepage: " https://dusw.example " });
-    await expect(getCustomerHomepage(client, 7)).resolves.toBe("https://dusw.example");
+    const client = clientReturning({ id: 7, name: "DUSW", homepage: " https://dusw.de " });
+    await expect(lookupCustomerHomepage(client, 7)).resolves.toEqual({
+      homepage: "https://dusw.de",
+      failed: false,
+    });
     expect(client.get).toHaveBeenCalledWith("/api/customers/7");
   });
 
@@ -20,11 +23,17 @@ describe("getCustomerHomepage", () => {
     ["a non-object response", "oops"],
     ["an empty response", null],
   ])("treats %s as no homepage", async (_label, response) => {
-    await expect(getCustomerHomepage(clientReturning(response), 7)).resolves.toBeNull();
+    await expect(lookupCustomerHomepage(clientReturning(response), 7)).resolves.toEqual({
+      homepage: null,
+      failed: false,
+    });
   });
 
-  it("treats a failed request as no homepage", async () => {
+  it("reports a failed request instead of claiming there is no homepage", async () => {
     const client = { get: vi.fn().mockRejectedValue(new Error("403")) } as unknown as KimaiClient;
-    await expect(getCustomerHomepage(client, 7)).resolves.toBeNull();
+    await expect(lookupCustomerHomepage(client, 7)).resolves.toEqual({
+      homepage: null,
+      failed: true,
+    });
   });
 });

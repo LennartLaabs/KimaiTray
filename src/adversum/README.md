@@ -40,24 +40,38 @@ Source order per customer:
 
 1. Manual logo set in settings (never expires).
 2. logo.dev, when a publishable key is configured: `https://img.logo.dev/{domain}?token=…&size=128&format=png&fallback=404`. The domain comes from the customer's Kimai homepage. `fallback=404` makes an unknown company fall through instead of returning a generated monogram.
-3. The customer's homepage: largest `apple-touch-icon`, then largest `rel="icon"`, then `/favicon.ico`. SVG icons are skipped.
+3. The customer's homepage, first usable image in this order:
+   1. `<meta name="msapplication-TileImage">`
+   2. `<meta property="og:image">`, only when the image turns out to be about square (aspect ratio up to 1.25). Share images are usually wide photos, which make no logo.
+   3. `<link rel="apple-touch-icon">`, largest first
+   4. every `<link rel="icon">` variant, largest first
+   5. `/favicon.ico`
+
+   SVG images are skipped (they are not rasterized natively). Markup inside scripts, styles and comments is ignored.
 4. Initials on the Kimai customer color.
 
-Kimai returns `homepage` only from `GET /api/customers/{id}`, so it is fetched
-per customer right before a logo lookup. The result of the lookup is cached,
-which makes that one detail request per customer and cache period.
+### Homepages and when a logo is looked up again
 
-All network access happens in `src-tauri/src/adversum/logos.rs`: HTTPS only,
-default port only, every resolved address must be public (no private,
-loopback, link-local, CGNAT or unique-local ranges), DNS results are pinned,
-redirects are followed manually and re-validated (at most 3), 1 MB limit,
-5 s connect and 10 s total timeout. Every image is decoded and re-encoded as a
-PNG of at most 128 px before it is stored or returned. The webview only ever
-receives `data:` URLs, so the CSP is unchanged.
+Kimai returns `homepage` only from `GET /api/customers/{id}`, not from the customer list. `useCustomerHomepages` reads it for every customer: at start, every five minutes, and when the popup gets the focus (at most once a minute). A failed request is kept apart from "no homepage" (`HomepageLookup.failed`); such a customer is left alone until Kimai answers.
 
-Cache: `<app data>/adversum/logos/<connection id>/<customer id>.{manual.png,auto.png,json}`.
-Found logos live 30 days, misses 3 days. Only the tray window fetches in the
-background; other windows read the cache and follow `adversum://logos-changed`.
+Every cached result remembers the homepage it was looked up for. `needsLogoFetch` (frontend) and `is_fresh` (Rust) agree on when it is looked up again:
+
+- nothing is cached yet,
+- the homepage in Kimai differs from the cached one (entered, changed or removed): **at once**,
+- the result expired: a found logo after 30 days, a miss after **one hour**,
+- a logo.dev key is configured that was never tried for this result.
+
+A lookup that fails outright (the fetch command rejects) is not repeated for the same input within ten minutes. Manual logos are never replaced.
+
+Each miss records why (`LogoProblem`: `noHomepage`, `invalidHomepage`, `unreachable`, `httpStatus` with the status as detail, `noIcon`). The settings page shows source, homepage and that reason per customer.
+
+### Network rules
+
+All network access happens in `src-tauri/src/adversum/logos.rs`: HTTPS only, default port only, every resolved address must be public (no private, loopback, link-local, CGNAT or unique-local ranges), DNS results are pinned, redirects are followed manually and re-validated (at most 3, for example from `www.` to the bare domain), 1 MB limit, 5 s connect and 10 s total timeout. Every image is decoded and re-encoded as a PNG of at most 128 px before it is stored or returned. The webview only ever receives `data:` URLs, so the CSP is unchanged.
+
+Cache: `<app data>/adversum/logos/<connection id>/<customer id>.{manual.png,auto.png,json}`. Only the tray window fetches in the background; other windows read the cache and follow `adversum://logos-changed`.
+
+Live check against real websites (needs network): `cargo test adversum::logos -- --ignored --nocapture`.
 
 ## Quick entry
 

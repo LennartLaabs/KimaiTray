@@ -783,7 +783,7 @@
     "settingsGroup": "Adversum",
     "logos": {
       "title": "Customer logos",
-      "description": "Show a round customer logo instead of color dots. Logos are loaded once, stored on this Mac and refreshed every 30 days.",
+      "description": "Show a round customer logo instead of color dots. A logo is looked up from the homepage stored for the customer in Kimai, kept on this Mac for 30 days and loaded again as soon as the homepage changes in Kimai. Without a logo, the lookup is repeated after an hour.",
       "display": "Display",
       "indicator": "Customer indicator",
       "indicatorDescription": "Logo shows the customer logo with the activity color as a small dot. Color dots keeps the original look.",
@@ -795,8 +795,8 @@
       "dropHint": "Drop an image on a customer or choose a file to set its logo by hand.",
       "noConnection": "Connect to Kimai to manage customer logos.",
       "empty": "This Kimai connection has no visible customers.",
-      "reloadAll": "Reload all logos",
-      "reloadAllDescription": "Fetches every logo again that was not set by hand.",
+      "reloadAll": "Reload logos",
+      "reloadAllDescription": "Reads every homepage from Kimai and fetches all logos again that were not set by hand.",
       "choose": "Choose image",
       "chooseFor": "Choose a logo image for {{customer}}",
       "reload": "Reload",
@@ -804,11 +804,19 @@
       "failed": "This image or logo could not be loaded.",
       "tooLarge": "The image is larger than 5 MB.",
       "source": {
-        "manual": "Set by hand",
-        "logodev": "From logo.dev",
-        "homepage": "From the homepage",
-        "none": "No logo found, showing initials",
+        "manual": "Manual",
+        "logodev": "logo.dev",
+        "homepage": "Homepage",
+        "none": "Initials",
         "pending": "Not loaded yet"
+      },
+      "problem": {
+        "noHomepage": "No homepage is stored for this customer in Kimai.",
+        "invalidHomepage": "The homepage is not a public https address.",
+        "unreachable": "The homepage could not be reached.",
+        "httpStatus": "The homepage answered with error {{detail}}.",
+        "noIcon": "No usable icon was found on the homepage.",
+        "lookupFailed": "The homepage could not be read from Kimai."
       }
     },
     "quick": {

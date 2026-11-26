@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KimaiClient } from "../../api/kimaiClient";
 import { logger } from "../../utils/logger";
-import { getCustomerHomepage } from "./customerHomepage";
+import { lookupCustomerHomepage, type HomepageLookup } from "./customerHomepage";
 import {
   fetchLogo,
   listLogos,
   onLogoChange,
   type LogoEntry,
 } from "./logoApi";
+import type { HomepageLookups } from "./useCustomerHomepages";
+
+/** A lookup that just failed is not repeated for the same input this soon. */
+const RETRY_PAUSE_MS = 10 * 60 * 1000;
 
 interface UseCustomerLogosOptions {
   client: KimaiClient | null;
@@ -16,29 +20,46 @@ interface UseCustomerLogosOptions {
   customerIds: readonly number[];
   logoDevToken: string;
   /**
-   * Fetch missing and expired logos in the background. Only the tray window
-   * does this, so two windows never fetch the same logo.
+   * Fetch missing, expired and outdated logos in the background. Only the
+   * tray window does this, so two windows never fetch the same logo.
    */
   autoFetch: boolean;
+  /** Current homepages from Kimai; background fetching waits for them. */
+  homepages?: HomepageLookups;
+  /** Changes whenever the homepages were read again. */
+  homepagesUpdatedAt?: number;
+  /** Told about the homepage read during a single customer's reload. */
+  onHomepageLookup?: (customerId: number, lookup: HomepageLookup) => void;
 }
 
 interface UseCustomerLogosResult {
   /** Cached entries of the current connection, by customer id. */
   entries: ReadonlyMap<number, LogoEntry>;
-  /** Fetch one customer's logo again, ignoring the cache. */
+  /**
+   * Reads the customer's homepage from Kimai and fetches the logo again,
+   * ignoring the cache. Rejects when Kimai could not be asked.
+   */
   reload: (customerId: number) => Promise<void>;
   /** Record an entry this window just changed itself (manual logo set or cleared). */
   apply: (customerId: number, entry: LogoEntry | null) => void;
 }
 
-/** Whether a customer's logo should be (re)fetched. */
+/**
+ * Whether a customer's logo should be (re)fetched: nothing cached yet, the
+ * homepage in Kimai differs from the one the cached result belongs to, the
+ * result expired, or a logo.dev key arrived that was never tried.
+ */
 export function needsLogoFetch(
   entry: LogoEntry | undefined,
+  homepage: string | null,
   hasLogoDevToken: boolean,
+  nowSeconds: number,
 ): boolean {
   if (!entry) return true;
   if (entry.source === "manual") return false;
-  return entry.stale || (hasLogoDevToken && !entry.triedLogoDev);
+  if (entry.homepage !== homepage) return true;
+  if (entry.expiresAt !== null && nowSeconds >= entry.expiresAt) return true;
+  return hasLogoDevToken && !entry.triedLogoDev;
 }
 
 export function useCustomerLogos({
@@ -47,6 +68,9 @@ export function useCustomerLogos({
   customerIds,
   logoDevToken,
   autoFetch,
+  homepages,
+  homepagesUpdatedAt = 0,
+  onHomepageLookup,
 }: UseCustomerLogosOptions): UseCustomerLogosResult {
   const [loaded, setLoaded] = useState<{
     connectionId: string;
@@ -54,10 +78,10 @@ export function useCustomerLogos({
   } | null>(null);
   const connectionRef = useRef(connectionId);
   connectionRef.current = connectionId;
-  // One attempt per customer and logo.dev key per session: a customer without
-  // a logo must not be fetched again on every render, while a corrected key
-  // gets a fresh try.
-  const attemptedRef = useRef(new Set<string>());
+  // When each lookup was last attempted, by customer, logo.dev key and
+  // homepage. A lookup that keeps failing is not repeated on every render,
+  // while a new key or a changed homepage is tried at once.
+  const attemptsRef = useRef(new Map<string, number>());
 
   const mergeEntry = useCallback(
     (forConnection: string, customerId: number, entry: LogoEntry | null) => {
@@ -105,8 +129,12 @@ export function useCustomerLogos({
   }, [mergeEntry]);
 
   const fetchOne = useCallback(
-    async (operationClient: KimaiClient, customerId: number, force: boolean) => {
-      const homepage = await getCustomerHomepage(operationClient, customerId);
+    async (
+      operationClient: KimaiClient,
+      customerId: number,
+      homepage: string | null,
+      force: boolean,
+    ) => {
       const entry = await fetchLogo({
         connectionId: operationClient.connectionId,
         customerId,
@@ -133,26 +161,29 @@ export function useCustomerLogos({
 
   useEffect(() => {
     const known = entriesRef.current;
-    if (!autoFetch || !client || !entriesReady || !known || !customerKey) return;
+    if (!autoFetch || !client || !entriesReady || !known || !homepages || !customerKey) return;
     if (client.connectionId !== connectionId) return;
     const hasToken = logoDevToken !== "";
-    const pending = customerKey
-      .split(",")
-      .map(Number)
-      .filter((customerId) => {
-        if (attemptedRef.current.has(attemptKey(client, customerId, logoDevToken))) {
-          return false;
-        }
-        return needsLogoFetch(known.get(customerId), hasToken);
-      });
+    const now = Date.now();
+    const pending: { customerId: number; homepage: string | null; attempt: string }[] = [];
+    for (const customerId of customerKey.split(",").map(Number)) {
+      const lookup = homepages.get(customerId);
+      // Without a readable homepage nothing new can be learned.
+      if (!lookup || lookup.failed) continue;
+      if (!needsLogoFetch(known.get(customerId), lookup.homepage, hasToken, now / 1000)) continue;
+      const attempt = attemptKey(client, customerId, logoDevToken, lookup.homepage);
+      const attemptedAt = attemptsRef.current.get(attempt);
+      if (attemptedAt !== undefined && now - attemptedAt < RETRY_PAUSE_MS) continue;
+      pending.push({ customerId, homepage: lookup.homepage, attempt });
+    }
     if (pending.length === 0) return;
     let cancelled = false;
     void (async () => {
-      for (const customerId of pending) {
+      for (const { customerId, homepage, attempt } of pending) {
         if (cancelled || connectionRef.current !== connectionId) return;
-        attemptedRef.current.add(attemptKey(client, customerId, logoDevToken));
+        attemptsRef.current.set(attempt, Date.now());
         try {
-          await fetchOne(client, customerId, false);
+          await fetchOne(client, customerId, homepage, false);
         } catch (error) {
           logger.debug(`Logo fetch failed for customer ${customerId}: ${String(error)}`);
         }
@@ -161,14 +192,27 @@ export function useCustomerLogos({
     return () => {
       cancelled = true;
     };
-  }, [autoFetch, client, connectionId, customerKey, logoDevToken, entriesReady, fetchOne]);
+  }, [
+    autoFetch,
+    client,
+    connectionId,
+    customerKey,
+    logoDevToken,
+    entriesReady,
+    homepages,
+    homepagesUpdatedAt,
+    fetchOne,
+  ]);
 
   const reload = useCallback(
     async (customerId: number) => {
       if (!client) return;
-      await fetchOne(client, customerId, true);
+      const lookup = await lookupCustomerHomepage(client, customerId);
+      onHomepageLookup?.(customerId, lookup);
+      if (lookup.failed) throw new Error("The homepage could not be read from Kimai");
+      await fetchOne(client, customerId, lookup.homepage, true);
     },
-    [client, fetchOne],
+    [client, fetchOne, onHomepageLookup],
   );
 
   const apply = useCallback(
@@ -185,8 +229,13 @@ export function useCustomerLogos({
   };
 }
 
-function attemptKey(client: KimaiClient, customerId: number, token: string): string {
-  return `${client.cacheScope}:${customerId}:${token}`;
+function attemptKey(
+  client: KimaiClient,
+  customerId: number,
+  token: string,
+  homepage: string | null,
+): string {
+  return JSON.stringify([client.cacheScope, customerId, token, homepage]);
 }
 
 const EMPTY_ENTRIES: ReadonlyMap<number, LogoEntry> = new Map();
