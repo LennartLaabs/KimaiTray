@@ -1,3 +1,5 @@
+import { sameDay } from "./dateParser";
+
 /**
  * German time phrases of the quick entry bar.
  *
@@ -7,13 +9,23 @@
  *
  * Parsing works on the raw words, because normalization would destroy ":"
  * and ",". Words that are not part of a time phrase are left alone.
+ *
+ * With a `day` other than today (see `dateParser.ts`) the times lie on that
+ * day: "von 10 bis 11" is 10:00 to 11:00 there, and a bare duration ("2 h")
+ * begins at `DEFAULT_BEGIN_HOUR`, because nothing says when it was. A day
+ * with neither is `incomplete`: there is nothing to enter yet.
  */
 export type TimeSpec =
   | { kind: "none" }
   | { kind: "start"; begin: Date }
   | { kind: "range"; begin: Date; end: Date }
   /** A time phrase was recognized, but it lies in the future. */
-  | { kind: "future" };
+  | { kind: "future" }
+  /** Another day was named, but neither a time span nor a duration. */
+  | { kind: "incomplete" };
+
+/** Where a duration without a clock time begins on another day. */
+export const DEFAULT_BEGIN_HOUR = 9;
 
 export interface TimeParseResult {
   time: TimeSpec;
@@ -97,6 +109,16 @@ function latestPast(time: ClockTime, now: Date): Date | null {
   return past.length > 0 ? past[past.length - 1]! : null;
 }
 
+/**
+ * The clock time on a day that is over. Nothing there lies in the future, so
+ * the hour decides: "von 2 bis 4" was the afternoon, "von 9 bis 11" the
+ * morning.
+ */
+function onOtherDay(time: ClockTime, day: Date): Date {
+  const hour = time.ambiguous && time.hour < 7 ? time.hour + 12 : time.hour;
+  return onDay(day, hour, time.minute);
+}
+
 /** The first reading of the clock time after `begin` (same day). */
 function firstAfter(time: ClockTime, begin: Date): Date | null {
   const readings = [onDay(begin, time.hour, time.minute)];
@@ -151,10 +173,12 @@ function readSpokenDuration(words: string[], index: number): { minutes: number; 
 }
 
 /** Finds the first time phrase in the input and removes it from the words. */
-export function parseTime(input: string, now: Date): TimeParseResult {
+export function parseTime(input: string, now: Date, day?: Date | null): TimeParseResult {
   const words = input.trim().split(/\s+/).filter(Boolean);
+  const other = day && !sameDay(day, now) ? day : null;
+  const tomorrow = other !== null && other.getTime() > now.getTime();
   const found = (time: TimeSpec, index: number, used: number): TimeParseResult => ({
-    time,
+    time: tomorrow ? { kind: "future" } : time,
     rest: [...words.slice(0, index), ...words.slice(index + used)],
     phrase: words.slice(index, index + used),
   });
@@ -169,7 +193,7 @@ export function parseTime(input: string, now: Date): TimeParseResult {
       const to = from && lower(words[bisIndex]) === "bis" ? readClock(words, bisIndex + 1) : null;
       if (from && to) {
         const used = 1 + from.used + 1 + to.used;
-        const begin = latestPast(from.time, now);
+        const begin = other ? onOtherDay(from.time, other) : latestPast(from.time, now);
         const end = begin ? firstAfter(to.time, begin) : null;
         return found(
           begin && end ? { kind: "range", begin, end } : { kind: "future" },
@@ -182,6 +206,8 @@ export function parseTime(input: string, now: Date): TimeParseResult {
     if (START_WORDS.has(word)) {
       const at = readClock(words, index + 1);
       if (at) {
+        // A timer cannot have been running since some time on another day.
+        if (other) return found({ kind: "incomplete" }, index, 1 + at.used);
         const begin = latestPast(at.time, now);
         return found(
           begin ? { kind: "start", begin } : { kind: "future" },
@@ -204,17 +230,21 @@ export function parseTime(input: string, now: Date): TimeParseResult {
 
     const duration = readDuration(words, index);
     if (duration) {
+      const end = other
+        ? onDay(other, DEFAULT_BEGIN_HOUR, duration.minutes)
+        : new Date(now.getTime());
       return found(
-        {
-          kind: "range",
-          begin: new Date(now.getTime() - duration.minutes * minute),
-          end: new Date(now.getTime()),
-        },
+        { kind: "range", begin: new Date(end.getTime() - duration.minutes * minute), end },
         index,
         duration.used,
       );
     }
   }
 
-  return { time: { kind: "none" }, rest: words, phrase: [] };
+  const nothing: TimeSpec = tomorrow
+    ? { kind: "future" }
+    : other
+      ? { kind: "incomplete" }
+      : { kind: "none" };
+  return { time: nothing, rest: words, phrase: [] };
 }

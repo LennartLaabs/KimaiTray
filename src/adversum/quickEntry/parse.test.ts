@@ -99,14 +99,18 @@ describe("parseQuickEntry", () => {
   });
 
   it("uses aliases for customers and activities", () => {
+    // Aliases that are more than a name stay in the note, the activity word
+    // first: "gigi" is a person, "call" what happened.
     expect(top("gigi call")).toEqual({
       label: "DUSW Unternehmensgruppe · Marketing Retainer · Austausch",
-      note: "",
+      note: "Call Gigi",
     });
     expect(top("herosmile telefonat rückruf")).toEqual({
       label: "Herosmile · Marketing Retainer · Austausch",
-      note: "Rückruf",
+      note: "Telefonat Rückruf",
     });
+    // "pm" only abbreviates the activity's name.
+    expect(top("herosmile pm rückruf").note).toBe("Rückruf");
   });
 
   it("lets several words name one entity and keeps typed capitals in the note", () => {
@@ -124,7 +128,7 @@ describe("parseQuickEntry", () => {
     expect(top("herosmiel konzeption").label).toBe("Herosmile · Marketing Retainer · Konzeption");
     expect(top("muller imagefilm, videoschnitt").label).toBe("Müller & Söhne · Imagefilm · Videoschnitt");
     expect(top("Müller pm").label).toBe("Müller & Söhne · Imagefilm · Projektmanagement");
-    expect(top("dusw pm gigi-call").note).toBe("Gigi Call");
+    expect(top("dusw pm gigi-call").note).toBe("Gigi-Call");
   });
 
   it("fills in what was not typed from the history", () => {
@@ -205,11 +209,44 @@ describe("parseQuickEntry", () => {
     });
     expect(logged.suggestions[0]).toMatchObject({
       combination: { customer: "Herosmile", activity: "Austausch" },
-      note: "Abstimmung",
+      note: "Call Abstimmung",
     });
 
     expect(parse("dusw pm 1,5 h").time.kind).toBe("range");
     expect(parse("dusw pm seit 11").time).toEqual({ kind: "future" });
+  });
+
+  it("takes the day out of the input and puts the time on it", () => {
+    const logged = parse("gigi call gestern von 10 bis 11");
+    expect(logged.day).toEqual(new Date(2026, 10, 25));
+    expect(logged.time).toEqual({
+      kind: "range",
+      begin: new Date(2026, 10, 25, 10, 0),
+      end: new Date(2026, 10, 25, 11, 0),
+    });
+    expect(logged.timePhrase).toBe("gestern von 10 bis 11");
+    expect(logged.suggestions[0]).toMatchObject({
+      combination: { customer: "DUSW Unternehmensgruppe", activity: "Austausch" },
+      note: "Call Gigi",
+    });
+
+    const dated = parse("dusw pm am 24.11., 2 h angebot");
+    expect(dated.day).toEqual(new Date(2026, 10, 24));
+    expect(dated.timePhrase).toBe("am 24.11. 2 h");
+    expect(dated.suggestions[0]?.note).toBe("Angebot");
+    expect(parse("dusw pm gestern").time).toEqual({ kind: "incomplete" });
+    expect(parse("dusw pm").day).toBeNull();
+  });
+
+  it("writes the note cleanly", () => {
+    // No punctuation left over, connecting words stay small.
+    expect(top("dusw pm angebot, für die messe!").note).toBe("Angebot für die Messe");
+    expect(top("dusw pm (rückruf)").note).toBe("Rückruf");
+    expect(top("dusw pm ...").note).toBe("");
+    // A capital anywhere means the note was written with care.
+    expect(top("dusw pm rückruf wegen Angebot").note).toBe("Rückruf wegen Angebot");
+    // Part of a hyphenated word names the customer, the rest is the note.
+    expect(top("dusw-flyer pm").note).toBe("Flyer Pm");
   });
 
   it("recognizes commands instead of suggesting tasks", () => {
@@ -219,6 +256,7 @@ describe("parseQuickEntry", () => {
       expect(parse(input)).toEqual({
         command,
         time: { kind: "none" },
+        day: null,
         timePhrase: "",
         suggestions: [],
         confidence: 1,

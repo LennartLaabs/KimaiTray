@@ -75,7 +75,8 @@ export default function QuickEntryBar({
       onAction({ type: "command", command });
     } else {
       const suggestion = suggestions[index];
-      if (!suggestion) return;
+      // A day without a time or duration is nothing that can be entered yet.
+      if (!suggestion || result.time.kind === "incomplete") return;
       onAction(actionForSuggestion(suggestion, result.time, mode));
     }
     setText("");
@@ -195,7 +196,7 @@ export default function QuickEntryBar({
                 onSelect={() => setSelected(index)}
                 onRun={(mode) => submit(index, mode)}
               >
-                <SuggestionContent suggestion={suggestion} time={result.time} />
+                <SuggestionContent suggestion={suggestion} time={result.time} day={result.day} />
               </QuickRow>
             ))
           )}

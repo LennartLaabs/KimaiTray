@@ -1,5 +1,6 @@
 import type { Combination, EntityWords, QuickCatalog } from "../quickEntry/catalog";
-import { editDistance, normalizeWords } from "../quickEntry/normalize";
+import { isNameLike, resemblance } from "../quickEntry/nameLike";
+import { normalizeWords } from "../quickEntry/normalize";
 import { scoreWord, type EntityKind, type QuickSuggestion } from "../quickEntry/parse";
 import type { AliasKind } from "../settings/adversumSettings";
 
@@ -17,6 +18,11 @@ export interface LearnedAlias {
   alias: string;
   /** Name of the entity it now stands for, for the confirmation. */
   name: string;
+  /**
+   * The word is just another spelling of the name ("solartec"). Otherwise it
+   * says something of its own ("Giuseppe") and stays in the note.
+   */
+  nameLike: boolean;
 }
 
 interface LearnInput {
@@ -58,25 +64,6 @@ function entityOf(
         ? ([catalog.projects, combination.projectId, combination.project] as const)
         : ([catalog.activities, combination.activityId, combination.activity] as const);
   return { id, name, words: all.get(id)!, all };
-}
-
-/** Consonants of a word: "kaka" → "kk". Speech keeps them better than vowels. */
-function skeleton(word: string): string {
-  return word.replace(/[aeiouy]/g, "");
-}
-
-/** How much a word resembles an entity's name, from 0 to 1. */
-export function resemblance(word: string, entity: EntityWords): number {
-  const targets = [...entity.words, entity.acronym, entity.words.join("")].filter(Boolean);
-  let best = 0;
-  for (const target of targets) {
-    const longest = Math.max(word.length, target.length);
-    best = Math.max(best, 1 - editDistance(word, target, longest) / longest);
-    if (skeleton(word).length >= 2 && skeleton(word) === skeleton(target)) {
-      best = Math.max(best, 0.8);
-    }
-  }
-  return best;
 }
 
 /**
@@ -129,16 +116,27 @@ export function aliasesToLearn({ spoken, proposed, chosen, catalog }: LearnInput
     const alias = misnamed ?? similar ?? only;
     if (!alias) continue;
     used.add(alias);
-    learned.push({ kind: target.alias, entityId: target.id, alias, name: target.name });
+    learned.push({
+      kind: target.alias,
+      entityId: target.id,
+      alias,
+      name: target.name,
+      nameLike: isNameLike(alias, target.words),
+    });
   }
   return learned;
 }
 
-/** Removes learned words from a note: they were names, not part of the note. */
+/**
+ * Removes learned words from a note when they were only names ("solartec").
+ * A learned word that says something of its own ("Giuseppe") stays.
+ */
 export function withoutLearned(note: string, learned: readonly LearnedAlias[]): string {
-  const aliases = new Set(learned.map((item) => item.alias));
+  const aliases = new Set(learned.filter((item) => item.nameLike).map((item) => item.alias));
   return note
     .split(/\s+/)
     .filter((word) => !normalizeWords(word).some((part) => aliases.has(part)))
     .join(" ");
 }
+
+export { resemblance };

@@ -264,6 +264,7 @@ function Confirm({ text, catalog, history, onAction, onEdit, onClose }: ConfirmP
     (reading.kind === "entry" &&
       reading.result.autoSelect &&
       reading.result.time.kind !== "future" &&
+      reading.result.time.kind !== "incomplete" &&
       suggestions.length > 0);
 
   // The first row is always preselected, so Enter accepts it. Only a
@@ -287,7 +288,8 @@ function Confirm({ text, catalog, history, onAction, onEdit, onClose }: ConfirmP
       onAction({ type: "note", text: reading.text }, []);
     } else if (reading.kind === "entry") {
       const suggestion = suggestions[index];
-      if (!suggestion) return;
+      // A day without a time or duration is nothing that can be entered yet.
+      if (!suggestion || reading.result.time.kind === "incomplete") return;
       done.current = true;
       // Taking anything but the first suggestion is a correction.
       const learned =
@@ -418,7 +420,11 @@ function Confirm({ text, catalog, history, onAction, onEdit, onClose }: ConfirmP
               onSelect={() => choose(index)}
               onRun={(mode) => run(index, mode)}
             >
-              <SuggestionContent suggestion={suggestion} time={reading.result.time} />
+              <SuggestionContent
+                suggestion={suggestion}
+                time={reading.result.time}
+                day={reading.result.day}
+              />
             </QuickRow>
           ))}
         {rowCount === 0 && (

@@ -364,7 +364,7 @@ describe("what the Small model really wrote for synthesized speech", () => {
     expect(entry("DUSW Projektmanagement, 3D-Call seit 10 Uhr.")).toMatchObject({
       customer: "DUSW",
       activity: "Projektmanagement",
-      note: "3d Call",
+      note: "3D-Call",
       time: { kind: "start", begin: at(10) },
     });
     expect(entry("Ich habe von 10 bis 11 mit Gigi telefoniert.")).toMatchObject({
@@ -566,5 +566,209 @@ describe("numberWord", () => {
     for (const word of ["hundert", "undzwanzig", "einund", "ein", "dusw", "", "zehnundzwanzig"]) {
       expect(numberWord(word)).toBeNull();
     }
+  });
+});
+
+describe("sentences with a date and with people", () => {
+  // Giuseppe ("Gigi") is the contact at DUSW; calls and meetings are booked
+  // on "Austausch", flyers on "Design".
+  const people = buildCatalog(customers, projects, activities, {
+    customers: { "1": ["giuseppe", "gigi"], "3": ["kaka"] },
+    projects: {},
+    activities: { "1": ["pm"], "2": ["call", "telefonat", "meeting"], "4": ["flyer"] },
+  });
+
+  function dated(sentence: string) {
+    const reading = readSpoken(sentence, people, history, now);
+    if (reading.kind !== "entry") throw new Error(`"${sentence}" was read as ${reading.kind}`);
+    const first = reading.result.suggestions[0]!;
+    return {
+      task: `${first.combination.customer} · ${first.combination.project} · ${first.combination.activity}`,
+      note: first.note,
+      day: reading.result.day,
+      time: reading.result.time,
+    };
+  }
+
+  function on(date: number, hour = 0, minute = 0): Date {
+    return new Date(2026, 10, date, hour, minute);
+  }
+
+  it("1: the sentence from the real test", () => {
+    expect(dated("Giuseppe Call, heute 26. November von 10 bis 11 Uhr.")).toEqual({
+      task: "DUSW · Retainer · Austausch",
+      note: "Call Giuseppe",
+      day: on(26),
+      time: { kind: "range", begin: on(26, 10), end: on(26, 11) },
+    });
+  });
+
+  it("2: names of customer and activity leave the note, the rest stays as said", () => {
+    expect(dated("DUSW Design, Roll-Ups für die Hallenfußball-Meisterschaft")).toEqual({
+      task: "DUSW · Website Relaunch · Design",
+      note: "Roll-Ups für die Hallenfußball-Meisterschaft",
+      day: null,
+      time: { kind: "none" },
+    });
+  });
+
+  it("3: yesterday, with a person and a reason", () => {
+    expect(
+      dated("Gestern von 9 bis 10 Uhr 30 Meeting mit Giuseppe wegen dem Fußball-Event"),
+    ).toEqual({
+      task: "DUSW · Retainer · Austausch",
+      note: "Meeting mit Giuseppe wegen dem Fußball-Event",
+      day: on(25),
+      time: { kind: "range", begin: on(25, 9), end: on(25, 10, 30) },
+    });
+  });
+
+  it("4: a duration on another day starts at nine", () => {
+    expect(dated("Vorgestern zwei Stunden SolarTech Videoschnitt, Rohschnitt Imagefilm")).toEqual({
+      task: "SolarTech NRW · Imagefilm · Videoschnitt",
+      note: "Rohschnitt",
+      day: on(24),
+      time: { kind: "range", begin: on(24, 9), end: on(24, 11) },
+    });
+  });
+
+  it("5: a weekday and a verb", () => {
+    expect(dated("Am Montag hab ich von 14 bis 16 Uhr mit Gigi telefoniert")).toEqual({
+      task: "DUSW · Retainer · Austausch",
+      note: "Telefonat Gigi",
+      day: on(23),
+      time: { kind: "range", begin: on(23, 14), end: on(23, 16) },
+    });
+  });
+
+  it("6: 'letzten Freitag'", () => {
+    expect(
+      dated("Letzten Freitag K&K Design, Standdesign überarbeitet, von 13 bis 15 Uhr 30"),
+    ).toEqual({
+      task: "K&K Global Solutions · Messeauftritt · Design",
+      note: "Standdesign überarbeitet",
+      day: on(20),
+      time: { kind: "range", begin: on(20, 13), end: on(20, 15, 30) },
+    });
+  });
+
+  it("7: a numeric date", () => {
+    expect(dated("Am 24.11. Herosmile Entwicklung, Checkout getestet, drei Stunden")).toEqual({
+      task: "Herosmile · Onlineshop · Entwicklung",
+      note: "Checkout getestet",
+      day: on(24),
+      time: { kind: "range", begin: on(24, 9), end: on(24, 12) },
+    });
+  });
+
+  it("8: today's date is today", () => {
+    expect(dated("26.11. von 8 bis 9 Buchhaltung Adversum")).toEqual({
+      task: "Adversum · Intern · Buchhaltung",
+      note: "",
+      day: on(26),
+      time: { kind: "range", begin: on(26, 8), end: on(26, 9) },
+    });
+  });
+
+  it("9: a whole sentence, as dictated", () => {
+    expect(
+      dated(
+        "Ich hatte am 20. November von 11 bis 12 ein Meeting mit Giuseppe bezüglich dem Fußball-Event.",
+      ),
+    ).toEqual({
+      task: "DUSW · Retainer · Austausch",
+      note: "Meeting mit Giuseppe bezüglich dem Fußball-Event",
+      day: on(20),
+      time: { kind: "range", begin: on(20, 11), end: on(20, 12) },
+    });
+  });
+
+  it("10: the time of day after 'gestern' is no note", () => {
+    expect(dated("Gestern Abend eine Stunde Recherche für Herosmile")).toEqual({
+      task: "Herosmile · Onlineshop · Recherche",
+      note: "",
+      day: on(25),
+      time: { kind: "range", begin: on(25, 9), end: on(25, 10) },
+    });
+  });
+
+  it("11: 'vorletzten Dienstag'", () => {
+    expect(dated("Vorletzten Dienstag von 9 bis 12 Videodreh SolarTech")).toEqual({
+      task: "SolarTech NRW · Imagefilm · Videodreh",
+      note: "",
+      day: on(17),
+      time: { kind: "range", begin: on(17, 9), end: on(17, 12) },
+    });
+  });
+
+  it("12: 'heute früh', the person after the activity word", () => {
+    expect(dated("Heute früh von 8 bis 9 Uhr 15 Call mit Gigi")).toEqual({
+      task: "DUSW · Retainer · Austausch",
+      note: "Call mit Gigi",
+      day: on(26),
+      time: { kind: "range", begin: on(26, 8), end: on(26, 9, 15) },
+    });
+  });
+
+  it("13: another day without a time or duration cannot be entered yet", () => {
+    expect(dated("Gestern DUSW Design")).toMatchObject({
+      task: "DUSW · Website Relaunch · Design",
+      note: "",
+      day: on(25),
+      time: { kind: "incomplete" },
+    });
+    expect(dated("Gestern seit 10 Uhr DUSW Design").time).toEqual({ kind: "incomplete" });
+  });
+
+  it("14: a day that is still to come", () => {
+    expect(dated("Am 30. November von 10 bis 11 Konzeption SolarTech")).toMatchObject({
+      task: "SolarTech NRW · Social Media · Konzeption",
+      day: on(30),
+      time: { kind: "future" },
+    });
+    expect(dated("Am 30. November Konzeption SolarTech").time).toEqual({ kind: "future" });
+  });
+
+  it("15: the activity word leads the note, the date comes last", () => {
+    expect(dated("Flyer für Giuseppe, gestern von 15 bis 17 Uhr")).toEqual({
+      task: "DUSW · Website Relaunch · Design",
+      note: "Flyer für Giuseppe",
+      day: on(25),
+      time: { kind: "range", begin: on(25, 15), end: on(25, 17) },
+    });
+  });
+
+  it("16: weekday and date together, times in words", () => {
+    expect(
+      dated("Montag, den 23. November, von zehn bis elf Uhr dreißig K&K Call wegen Messe"),
+    ).toEqual({
+      task: "K&K Global Solutions · Messeauftritt · Austausch",
+      note: "Call wegen Messe",
+      day: on(23),
+      time: { kind: "range", begin: on(23, 10), end: on(23, 11, 30) },
+    });
+  });
+
+  it("17: afternoon hours on a past day, and the name said again", () => {
+    expect(dated("Gigi Call für DUSW am 3.11. von 2 bis 4")).toEqual({
+      task: "DUSW · Retainer · Austausch",
+      note: "Call Gigi",
+      day: on(3),
+      time: { kind: "range", begin: on(3, 14), end: on(3, 16) },
+    });
+  });
+
+  it("moves the activity word to the front without leaving its connecting word behind", () => {
+    expect(dated("Giuseppe im Call wegen der Rechnung").note).toBe(
+      "Call Giuseppe wegen der Rechnung",
+    );
+    expect(dated("Mit Gigi im Meeting").note).toBe("Meeting Gigi");
+  });
+
+  it("keeps the date in the text that goes on to typing", () => {
+    expect(interpretSpoken("Gestern von 9 bis 10 DUSW Design", now)).toMatchObject({
+      kind: "entry",
+      text: "von 9 bis 10 DUSW Design 25.11.2026",
+    });
   });
 });

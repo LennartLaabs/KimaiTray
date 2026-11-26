@@ -7,11 +7,13 @@ import { buildCatalog } from "./catalog";
 import { buildHistory, EMPTY_HISTORY } from "./history";
 import QuickEntryBar, { completionText } from "./QuickEntryBar";
 import QuickToast from "./QuickToast";
+import { dayLabel } from "./SuggestionRow";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, string>) =>
       options ? `${key}:${Object.values(options).join(",")}` : key,
+    i18n: { language: "de" },
   }),
 }));
 
@@ -178,6 +180,43 @@ describe("QuickEntryBar", () => {
     expect(onClose).not.toHaveBeenCalled();
     key("Escape");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the day of an entry and enters nothing for a day without a time", () => {
+    vi.useFakeTimers({ now: new Date(2026, 10, 26, 10, 20) });
+    try {
+      const { container } = renderBar();
+      type("dusw pm gestern von 9 bis 10");
+      expect(container.querySelector("[data-chip='time']")?.textContent).toMatch(
+        /^Gestern, 25\.11\. · 0?9:00.*–10:00/,
+      );
+      key("Enter");
+      expect(onAction.mock.lastCall![0]).toMatchObject({
+        type: "log",
+        begin: "2026-11-25T09:00:00",
+        end: "2026-11-25T10:00:00",
+      });
+      onAction.mockClear();
+      type("dusw pm gestern");
+      const chip = container.querySelector("[data-chip='time']")!;
+      expect(chip.textContent).toBe("Gestern, 25.11. · adversum.quick.incompleteTime");
+      expect(chip.className).toContain("amber");
+      key("Enter");
+      expect(onAction).not.toHaveBeenCalled();
+      expect(input().value).toBe("dusw pm gestern");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("names days the way people do", () => {
+    const now = new Date(2026, 10, 26, 10, 20);
+    expect(dayLabel(new Date(2026, 10, 26), now, "de")).toBe("Heute");
+    expect(dayLabel(new Date(2026, 10, 24), now, "de")).toBe("Vorgestern, 24.11.");
+    expect(dayLabel(new Date(2026, 10, 20), now, "de")).toBe("Fr., 20.11.");
+    expect(dayLabel(new Date(2025, 10, 20), now, "de")).toBe("Do., 20.11.2025");
+    expect(dayLabel(new Date(2026, 10, 30), now, "de")).toBe("Mo., 30.11.");
+    expect(dayLabel(new Date(2026, 10, 25), now, "en")).toBe("Yesterday, 11/25");
   });
 
   it("shows recognized times and warns about future ones", () => {

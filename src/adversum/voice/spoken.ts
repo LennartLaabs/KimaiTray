@@ -1,5 +1,6 @@
 import type { QuickCatalog } from "../quickEntry/catalog";
 import type { QuickCommand } from "../quickEntry/commands";
+import { parseDate } from "../quickEntry/dateParser";
 import type { QuickHistory } from "../quickEntry/history";
 import { normalizeText } from "../quickEntry/normalize";
 import { parseQuickEntry, type QuickParseResult } from "../quickEntry/parse";
@@ -77,7 +78,7 @@ const COMMAND_PADDING = new Set([
 /** Carry no meaning wherever they stand. */
 const FILLERS = new Set([
   "aeh", "aehm", "ehm", "oehm", "hm", "hmm", "mh", "bitte", "mal", "halt", "quasi",
-  "sozusagen", "eigentlich", "also", "jetzt", "gerade", "eben", "nun", "heute", "ich",
+  "sozusagen", "eigentlich", "also", "jetzt", "gerade", "eben", "nun", "ich",
   "wir", "hab", "habe", "hatte", "bin", "war",
 ]);
 /** Carry no meaning at the start: "starte", "weiter mit dem", "okay, an der". */
@@ -184,7 +185,15 @@ export function interpretSpoken(transcript: string, now: Date): SpokenIntent {
   const command = spokenCommand(heard);
   if (command) return { kind: "command", command };
 
-  let tokens = rewriteSpokenTime(heard, now).filter((token) => !FILLERS.has(token.word));
+  // The day comes out first, so that "26. November" is not read as a time
+  // or a note. It goes back in at the end in the form the parser reads.
+  const dated = parseDate(text.split(" "), now);
+  const day = dated.day
+    ? [dated.day.getDate(), dated.day.getMonth() + 1, dated.day.getFullYear()].join(".")
+    : null;
+  const undated = day ? tokenize(dated.rest.join(" ")) : heard;
+
+  let tokens = rewriteSpokenTime(undated, now).filter((token) => !FILLERS.has(token.word));
   while (tokens.length > 0 && LEAD_INS.has(tokens[0]!.word)) tokens = tokens.slice(1);
   while (tokens.length > 0 && TRAILERS.has(tokens[tokens.length - 1]!.word)) {
     tokens = tokens.slice(0, -1);
@@ -198,7 +207,7 @@ export function interpretSpoken(transcript: string, now: Date): SpokenIntent {
   if (tokens.length === 0 && !telling) return { kind: "empty" };
   return {
     kind: "entry",
-    text: tokens.map((token) => token.raw).join(" "),
+    text: [...tokens.map((token) => token.raw), ...(day ? [day] : [])].join(" "),
     noteLead: telling?.lead ?? "",
     activityHints: telling?.hints ?? [],
   };

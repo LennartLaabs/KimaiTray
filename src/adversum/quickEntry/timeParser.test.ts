@@ -141,3 +141,60 @@ describe("words that are not time phrases", () => {
     expect(result.phrase).toEqual([]);
   });
 });
+
+describe("times on another day", () => {
+  const yesterday = new Date(2026, 10, 25);
+  const on = (hour: number, minute = 0) => new Date(2026, 10, 25, hour, minute);
+
+  it("puts a time span on that day, small hours in the afternoon", () => {
+    expect(parseTime("von 10 bis 11 dusw", now, yesterday)).toEqual({
+      time: { kind: "range", begin: on(10), end: on(11) },
+      rest: ["dusw"],
+      phrase: ["von", "10", "bis", "11"],
+    });
+    expect(parseTime("von 2 bis 4", now, yesterday).time).toEqual({
+      kind: "range",
+      begin: on(14),
+      end: on(16),
+    });
+    expect(parseTime("von 11 bis 1", now, yesterday).time).toEqual({
+      kind: "range",
+      begin: on(11),
+      end: on(13),
+    });
+    expect(parseTime("von 14:30 bis 18 uhr", now, yesterday).time).toEqual({
+      kind: "range",
+      begin: on(14, 30),
+      end: on(18),
+    });
+  });
+
+  it("starts a bare duration at nine", () => {
+    expect(parseTime("dusw 90 min", now, yesterday).time).toEqual({
+      kind: "range",
+      begin: on(9),
+      end: on(10, 30),
+    });
+  });
+
+  it("has nothing to enter without a span or duration", () => {
+    expect(parseTime("dusw pm", now, yesterday)).toEqual({
+      time: { kind: "incomplete" },
+      rest: ["dusw", "pm"],
+      phrase: [],
+    });
+    expect(parseTime("dusw seit 9", now, yesterday)).toEqual({
+      time: { kind: "incomplete" },
+      rest: ["dusw"],
+      phrase: ["seit", "9"],
+    });
+  });
+
+  it("treats today like no day, and a day to come as the future", () => {
+    expect(parseTime("dusw seit 9", now, at(0)).time).toEqual({ kind: "start", begin: at(9) });
+    expect(parseTime("dusw", now, null).time).toEqual({ kind: "none" });
+    const tomorrow = new Date(2026, 10, 27);
+    expect(parseTime("von 10 bis 11", now, tomorrow).time).toEqual({ kind: "future" });
+    expect(parseTime("dusw", now, tomorrow).time).toEqual({ kind: "future" });
+  });
+});

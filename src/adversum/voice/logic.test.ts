@@ -57,7 +57,8 @@ function combination(key: string) {
 
 /** The first spoken-mode suggestion for a sentence. */
 function proposal(sentence: string): QuickSuggestion {
-  return parseQuickEntry(sentence, catalog, EMPTY_HISTORY, now, {}).suggestions[0]!;
+  return parseQuickEntry(sentence, catalog, EMPTY_HISTORY, now, {})
+    .suggestions[0]!;
 }
 
 beforeEach(() => {
@@ -76,9 +77,9 @@ describe("buildVocabulary", () => {
   });
 
   it("puts recurring names from past notes first, where they are cut first", () => {
-    expect(buildVocabulary(catalog, undefined, ["Gigi", "Patrick", "gigi"])).toMatch(
-      /^Notizen: Gigi, Patrick\. Projekte: /,
-    );
+    expect(
+      buildVocabulary(catalog, undefined, ["Gigi", "Patrick", "gigi"]),
+    ).toMatch(/^Notizen: Gigi, Patrick\. Projekte: /);
   });
 
   it("leaves out empty groups and is empty without a catalog", () => {
@@ -102,7 +103,13 @@ describe("aliasesToLearn", () => {
         catalog,
       }),
     ).toEqual([
-      { kind: "customers", entityId: 2, alias: "soltim", name: "SolarTech NRW" },
+      {
+        kind: "customers",
+        entityId: 2,
+        alias: "soltim",
+        name: "SolarTech NRW",
+        nameLike: false,
+      },
     ]);
   });
 
@@ -115,7 +122,15 @@ describe("aliasesToLearn", () => {
         chosen: combination("21-2"),
         catalog,
       }),
-    ).toEqual([{ kind: "customers", entityId: 2, alias: "solatek", name: "SolarTech NRW" }]);
+    ).toEqual([
+      {
+        kind: "customers",
+        entityId: 2,
+        alias: "solatek",
+        name: "SolarTech NRW",
+        nameLike: true,
+      },
+    ]);
     // Of two candidates the closer one wins.
     expect(
       aliasesToLearn({
@@ -124,7 +139,15 @@ describe("aliasesToLearn", () => {
         chosen: combination("21-2"),
         catalog,
       }),
-    ).toEqual([{ kind: "customers", entityId: 2, alias: "solatek", name: "SolarTech NRW" }]);
+    ).toEqual([
+      {
+        kind: "customers",
+        entityId: 2,
+        alias: "solatek",
+        name: "SolarTech NRW",
+        nameLike: true,
+      },
+    ]);
   });
 
   it("learns the only leftover word for the customer, by its sound or not at all alike", () => {
@@ -135,7 +158,15 @@ describe("aliasesToLearn", () => {
         chosen: combination("31-2"),
         catalog,
       }),
-    ).toEqual([{ kind: "customers", entityId: 3, alias: "kaka", name: "K&K Global Solutions" }]);
+    ).toEqual([
+      {
+        kind: "customers",
+        entityId: 3,
+        alias: "kaka",
+        name: "K&K Global Solutions",
+        nameLike: true,
+      },
+    ]);
     expect(
       aliasesToLearn({
         spoken: "Düsseldorfer pm",
@@ -143,7 +174,15 @@ describe("aliasesToLearn", () => {
         chosen: combination("11-1"),
         catalog,
       }),
-    ).toEqual([{ kind: "customers", entityId: 1, alias: "duesseldorfer", name: "DUSW" }]);
+    ).toEqual([
+      {
+        kind: "customers",
+        entityId: 1,
+        alias: "duesseldorfer",
+        name: "DUSW",
+        nameLike: false,
+      },
+    ]);
   });
 
   it("learns nothing when the words already name what was chosen", () => {
@@ -185,7 +224,12 @@ describe("aliasesToLearn", () => {
       words: { customer: ["dusw"], project: [], activity: ["design"] },
     };
     expect(
-      aliasesToLearn({ spoken: "DUSW Design", proposed, chosen: combination("11-3"), catalog }),
+      aliasesToLearn({
+        spoken: "DUSW Design",
+        proposed,
+        chosen: combination("11-3"),
+        catalog,
+      }),
     ).toEqual([]);
     expect(
       aliasesToLearn({
@@ -207,7 +251,13 @@ describe("aliasesToLearn", () => {
     // "messestand" resembles the project "Messeauftritt" too, but the
     // customer comes first and takes the only word.
     expect(learned).toEqual([
-      { kind: "customers", entityId: 3, alias: "messestand", name: "K&K Global Solutions" },
+      {
+        kind: "customers",
+        entityId: 3,
+        alias: "messestand",
+        name: "K&K Global Solutions",
+        nameLike: false,
+      },
     ]);
   });
 });
@@ -228,8 +278,27 @@ describe("resemblance", () => {
 
 describe("withoutLearned", () => {
   it("drops learned words from the note", () => {
-    const learned = [{ kind: "customers" as const, entityId: 3, alias: "kaka", name: "K&K" }];
-    expect(withoutLearned("Kaka Standbau planen", learned)).toBe("Standbau planen");
+    const learned = [
+      {
+        kind: "customers" as const,
+        entityId: 3,
+        alias: "kaka",
+        name: "K&K",
+        nameLike: true,
+      },
+      // More than a name: it stays.
+      {
+        kind: "customers" as const,
+        entityId: 1,
+        alias: "giuseppe",
+        name: "DUSW",
+        nameLike: false,
+      },
+    ];
+    expect(withoutLearned("Kaka Standbau planen", learned)).toBe(
+      "Standbau planen",
+    );
+    expect(withoutLearned("Call Giuseppe", learned)).toBe("Call Giuseppe");
     expect(withoutLearned("Standbau", learned)).toBe("Standbau");
     expect(withoutLearned("Kaka", learned)).toBe("");
     expect(withoutLearned("Kaka Design", [])).toBe("Kaka Design");

@@ -16,10 +16,35 @@ function clockTime(date: Date): string {
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-export function TimeChip({ time }: { time: TimeSpec }) {
-  const { t } = useTranslation();
+/**
+ * The day of an entry for the chip: "Heute", "Gestern, 25.11.", "Fr., 20.11."
+ * and with the year when it is not this one.
+ */
+export function dayLabel(day: Date, now: Date, language: string): string {
+  const midnight = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const daysAgo = Math.round((midnight(now) - midnight(day)) / 86_400_000);
+  const near = daysAgo >= 0 && daysAgo <= 2;
+  const date = new Intl.DateTimeFormat(language, {
+    ...(near ? {} : { weekday: "short" }),
+    day: "numeric",
+    month: "numeric",
+    ...(day.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  }).format(day);
+  if (!near) return date;
+  const relative = new Intl.RelativeTimeFormat(language, { numeric: "auto" }).format(
+    -daysAgo,
+    "day",
+  );
+  const word = relative.charAt(0).toUpperCase() + relative.slice(1);
+  return daysAgo === 0 ? word : `${word}, ${date}`;
+}
+
+export function TimeChip({ time, day = null }: { time: TimeSpec; day?: Date | null }) {
+  const { t, i18n } = useTranslation();
   if (time.kind === "none") return null;
-  const warning = time.kind === "future";
+  const warning = time.kind === "future" || time.kind === "incomplete";
+  const date = day ? `${dayLabel(day, new Date(), i18n.language)} · ` : "";
   return (
     <span
       data-chip="time"
@@ -29,11 +54,16 @@ export function TimeChip({ time }: { time: TimeSpec }) {
           : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
       }`}
     >
+      {date}
       {time.kind === "start"
         ? t("adversum.quick.since", { time: clockTime(time.begin) })
         : time.kind === "range"
           ? `${clockTime(time.begin)}–${clockTime(time.end)}`
-          : t("adversum.quick.futureTime")}
+          : t(
+              time.kind === "future"
+                ? "adversum.quick.futureTime"
+                : "adversum.quick.incompleteTime",
+            )}
     </span>
   );
 }
@@ -72,9 +102,12 @@ export function QuickRow({ id, selected, onSelect, onRun, children }: QuickRowPr
 export function SuggestionContent({
   suggestion,
   time,
+  day = null,
 }: {
   suggestion: QuickSuggestion;
   time: TimeSpec;
+  /** The day that was named, shown in front of the time. */
+  day?: Date | null;
 }) {
   const display = useAdversumDisplay();
   const { combination, note } = suggestion;
@@ -104,7 +137,7 @@ export function SuggestionContent({
             {note}
           </span>
         )}
-        <TimeChip time={time} />
+        <TimeChip time={time} day={day} />
       </span>
     </>
   );

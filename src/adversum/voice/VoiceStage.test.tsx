@@ -15,6 +15,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, string>) =>
       options ? `${key}:${Object.values(options).join(",")}` : key,
+    i18n: { language: "de" },
   }),
 }));
 vi.mock("@tauri-apps/api/window", () => ({
@@ -305,8 +306,23 @@ describe("the confirmation card", () => {
     press("Enter");
     expect(onAction).toHaveBeenCalledWith(
       expect.objectContaining({ type: "start", projectId: 21, activityId: 2, description: "" }),
-      [{ kind: "customers", entityId: 2, alias: "heroschmeil", name: "Herosmile" }],
+      [{ kind: "customers", entityId: 2, alias: "heroschmeil", name: "Herosmile", nameLike: true }],
     );
+  });
+
+  it("shows the day and waits when a day has neither time nor duration", () => {
+    const { container } = result("Gestern von 9 bis 10 DUSW Design");
+    expect(container.querySelector("[data-chip='time']")?.textContent).toMatch(/^Gestern, /);
+    expect(container.querySelector("[data-voice-countdown]")).not.toBeNull();
+    cleanup();
+
+    const waiting = result("Gestern DUSW Design");
+    expect(waiting.container.querySelector("[data-chip='time']")?.textContent).toContain(
+      "adversum.quick.incompleteTime",
+    );
+    expect(waiting.container.querySelector("[data-voice-countdown]")).toBeNull();
+    press("Enter");
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it("takes the first suggestion as it is, also by mouse", () => {

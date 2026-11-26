@@ -1,7 +1,9 @@
 import type { Combination, EntityWords, QuickCatalog } from "./catalog";
 import { parseCommand, type QuickCommand } from "./commands";
+import { parseDate } from "./dateParser";
 import { historyScore, type QuickHistory } from "./history";
-import { editDistance, normalizeWords } from "./normalize";
+import { isNameLike } from "./nameLike";
+import { editDistance, normalizeText, normalizeWords } from "./normalize";
 import { parseTime, type TimeSpec } from "./timeParser";
 
 export const MAX_SUGGESTIONS = 5;
@@ -50,7 +52,10 @@ export interface SpokenOptions {
 
 export interface QuickSuggestion {
   combination: Combination;
-  /** Words that named no entity, as the note of the new entry. */
+  /**
+   * The note of the new entry: the words that named no entity, and those
+   * that named one but say something of their own ("Call", "Giuseppe").
+   */
   note: string;
   /** Ranking score: text match plus history. */
   score: number;
@@ -68,7 +73,9 @@ export interface QuickParseResult {
   /** Set when the input is a command; then there are no suggestions. */
   command: QuickCommand | null;
   time: TimeSpec;
-  /** The time phrase as typed ("seit 9:45"); empty without one. */
+  /** The day that was named ("gestern", "26.11."); `null` when none was. */
+  day: Date | null;
+  /** The date and time phrases as typed ("gestern von 9 bis 10"). */
   timePhrase: string;
   /** Best combinations first, at most `MAX_SUGGESTIONS`. */
   suggestions: QuickSuggestion[];
@@ -101,12 +108,24 @@ export type EntityKind = "customer" | "project" | "activity";
 type Kind = EntityKind;
 const KINDS: readonly Kind[] = ["customer", "project", "activity"];
 
+/** One word of the note. */
+interface NoteItem {
+  index: number;
+  /**
+   * The entity the word named as well. Such a word stays in the note because
+   * it is no mere name: "Call" for the activity "Austausch".
+   */
+  kept: Kind | null;
+  /** A connecting word between two note words ("für", "mit"). */
+  glue?: boolean;
+}
+
 interface Assignment {
   textScore: number;
   matchedWords: number;
   namesTarget: boolean;
-  /** Indices of the words that belong to the note, in order. */
-  note: number[];
+  /** The words that belong to the note, in order. */
+  note: NoteItem[];
   words: Record<Kind, string[]>;
 }
 
@@ -138,28 +157,35 @@ function bestKind(
  * and everything after it belongs to the note too:
  * "dusw pm gigi call" → customer "dusw", activity "pm", note "gigi call",
  * even though "gigi" and "call" are aliases as well.
+ *
+ * A naming word that is more than a name stays in the note: "gigi call"
+ * names customer and activity and still tells what was done.
  */
 function assign(words: readonly string[], entities: Record<Kind, EntityWords>): Assignment {
   const closed = new Set<Kind>();
   const named: Record<Kind, string[]> = { customer: [], project: [], activity: [] };
+  const note: NoteItem[] = [];
   let open: Kind | null = null;
   let textScore = 0;
   let matchedWords = 0;
   let index = 0;
   for (; index < words.length; index++) {
-    const { kind, score } = bestKind(words[index]!, entities, closed, open);
+    const word = words[index]!;
+    const { kind, score } = bestKind(word, entities, closed, open);
     if (!kind || score < MATCH_THRESHOLD) break;
     if (open && open !== kind) closed.add(open);
     open = kind;
     textScore += score;
     matchedWords += 1;
-    named[kind].push(words[index]!);
+    named[kind].push(word);
+    if (!isNameLike(word, entities[kind])) note.push({ index, kept: kind });
   }
+  for (; index < words.length; index++) note.push({ index, kept: null });
   return {
     textScore,
     matchedWords,
     namesTarget: named.customer.length + named.project.length > 0,
-    note: words.slice(index).map((_, offset) => index + offset),
+    note,
     words: named,
   };
 }
@@ -179,14 +205,14 @@ function assignSpoken(
   let open: Kind | null = null;
   let textScore = 0;
   let matchedWords = 0;
-  // Each run of note words between entities, glue words included.
-  const runs: { index: number; glue: boolean }[][] = [[]];
+  // Each run of note words between names, glue words included.
+  const runs: NoteItem[][] = [[]];
   let noteStarted = false;
   words.forEach((word, index) => {
-    const glue = GLUE_WORDS.has(word);
+    const run = runs[runs.length - 1]!;
     // A glue word inside a name ("Haus am See") belongs to that name.
-    if (glue && !(open && scoreWord(word, entities[open]) === 1)) {
-      runs[runs.length - 1]!.push({ index, glue: true });
+    if (GLUE_WORDS.has(word) && !(open && scoreWord(word, entities[open]) === 1)) {
+      run.push({ index, kept: null, glue: true });
       return;
     }
     const { kind, score } = bestKind(word, entities, closed, open);
@@ -196,6 +222,20 @@ function assignSpoken(
       textScore += score;
       matchedWords += 1;
       named[kind].push(word);
+      // More than a name ("Giuseppe", "Call"): it stays where it was said.
+      if (isNameLike(word, entities[kind])) runs.push([]);
+      else run.push({ index, kept: kind });
+      return;
+    }
+    // The name of something already named, said again ("Gigi Call für
+    // DUSW"): still a name, not a note.
+    const again = KINDS.some(
+      (candidate) =>
+        closed.has(candidate) &&
+        scoreWord(word, entities[candidate]) >= LATE_MATCH_THRESHOLD &&
+        isNameLike(word, entities[candidate]),
+    );
+    if (again) {
       runs.push([]);
       return;
     }
@@ -203,13 +243,13 @@ function assignSpoken(
     if (open) closed.add(open);
     open = null;
     noteStarted = true;
-    runs[runs.length - 1]!.push({ index, glue: false });
+    run.push({ index, kept: null });
   });
   const note = runs.flatMap((run) => {
     const first = run.findIndex((item) => !item.glue);
     if (first < 0) return [];
     const last = run.length - 1 - [...run].reverse().findIndex((item) => !item.glue);
-    return run.slice(first, last + 1).map((item) => item.index);
+    return run.slice(first, last + 1);
   });
   return {
     textScore,
@@ -257,11 +297,69 @@ function hintScore(activity: EntityWords, hints: readonly string[]): number {
   return index < 0 ? 0 : Math.max(0, HINT_SCORE - HINT_STEP * index);
 }
 
-/** "gigi call" → "Gigi Call"; a note typed with capitals is kept as typed. */
-function formatNote(words: readonly string[]): string {
-  const note = words.join(" ");
-  if (note !== note.toLowerCase()) return note;
-  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+/** One typed or spoken word and the normalized words it consists of. */
+interface InputToken {
+  raw: string;
+  /** Positions of its normalized words among all words. */
+  members: number[];
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The word without the punctuation of the sentence around it. */
+function withoutEdgePunctuation(raw: string): string {
+  return raw
+    .replace(/^[^\p{L}\p{N}]+/u, "")
+    .replace(/[^\p{L}\p{N}%€$+#]+$/u, "");
+}
+
+/**
+ * The note as text. The word that decided the activity leads ("Giuseppe
+ * Call" → "Call Giuseppe"), like the noun of a spoken verb does ("Telefonat
+ * Gigi"). Words keep the spelling they came in, hyphens included; a note
+ * without any capital letter gets them ("gigi call" → "Gigi Call").
+ */
+function formatNote(
+  items: readonly NoteItem[],
+  words: readonly string[],
+  tokens: readonly InputToken[],
+  lead: string,
+): string {
+  const leading = items.filter((item) => item.kept === "activity");
+  const ordered = [
+    ...leading,
+    ...items.filter(
+      (item, position) =>
+        item.kept !== "activity" &&
+        // A glue word in front of a word that moved away connects nothing.
+        !(item.glue && items[position + 1]?.kept === "activity"),
+    ),
+  ];
+  const inNote = new Set(ordered.map((item) => item.index));
+  const written = new Set<InputToken>();
+  const pieces: { text: string; kept: boolean }[] = [];
+  for (const item of ordered) {
+    const token = tokens.find((candidate) => candidate.members.includes(item.index))!;
+    const whole = token.members.every((member) => inNote.has(member));
+    if (whole && written.has(token)) continue;
+    written.add(token);
+    const text = whole ? withoutEdgePunctuation(token.raw) : words[item.index]!;
+    if (text) pieces.push({ text, kept: item.kept !== null });
+  }
+
+  const plain = pieces.map((piece) => piece.text).join(" ");
+  const lowercase = plain === plain.toLowerCase();
+  const texts = pieces.map((piece) => {
+    if (!lowercase) return piece.kept ? capitalize(piece.text) : piece.text;
+    if (GLUE_WORDS.has(normalizeText(piece.text))) return piece.text;
+    return piece.text.replace(/(^|-)(\p{L})/gu, (_, before: string, letter: string) =>
+      before + letter.toUpperCase(),
+    );
+  });
+  if (lead && normalizeText(texts[0] ?? "") !== normalizeText(lead)) texts.unshift(lead);
+  return capitalize(texts.join(" "));
 }
 
 /**
@@ -284,6 +382,7 @@ export function parseQuickEntry(
     return {
       command,
       time: { kind: "none" },
+      day: null,
       timePhrase: "",
       suggestions: [],
       confidence: 1,
@@ -291,16 +390,17 @@ export function parseQuickEntry(
     };
   }
 
-  const { time, rest, phrase } = parseTime(input, now);
+  const dated = parseDate(input.trim().split(/\s+/).filter(Boolean), now);
+  const { time, rest, phrase } = parseTime(dated.rest.join(" "), now, dated.day);
   // Each raw word can normalize to several words ("gigi-call"); keep the raw
   // spelling for the note and the normalized words for matching.
-  const rawWords = rest.flatMap((raw) => {
+  const words: string[] = [];
+  const tokens: InputToken[] = rest.map((raw) => {
     const normalized = normalizeWords(raw);
-    return normalized.length === 1
-      ? [{ raw, word: normalized[0]! }]
-      : normalized.map((word) => ({ raw: word, word }));
+    const members = normalized.map((_, offset) => words.length + offset);
+    words.push(...normalized);
+    return { raw, members };
   });
-  const words = rawWords.map((item) => item.word);
 
   const customerOf = new Map(
     spoken ? catalog.combinations.map((item) => [item.key, item.customerId]) : [],
@@ -317,7 +417,7 @@ export function parseQuickEntry(
     // What speaks for the combination besides the words that name it.
     const affinity = spoken
       ? noteAffinity(
-          assignment.note.map((index) => words[index]!),
+          assignment.note.filter((item) => item.kept === null).map((item) => words[item.index]!),
           combination,
           history,
           customerOf,
@@ -350,12 +450,7 @@ export function parseQuickEntry(
     .slice(0, MAX_SUGGESTIONS)
     .map(({ combination, assignment, score, namesTarget }) => ({
       combination,
-      note: [
-        spoken?.noteLead,
-        formatNote(assignment.note.map((index) => rawWords[index]!.raw)),
-      ]
-        .filter(Boolean)
-        .join(" "),
+      note: formatNote(assignment.note, words, tokens, spoken?.noteLead ?? ""),
       score,
       textScore: assignment.textScore,
       matchedWords: assignment.matchedWords,
@@ -375,7 +470,10 @@ export function parseQuickEntry(
   return {
     command: null,
     time,
-    timePhrase: phrase.join(" "),
+    day: dated.day,
+    timePhrase: [...dated.phrase.map((word) => word.replace(/[,;:!?]+$/, "")), ...phrase].join(
+      " ",
+    ),
     suggestions,
     confidence,
     autoSelect: confidence >= AUTO_SELECT_CONFIDENCE,
