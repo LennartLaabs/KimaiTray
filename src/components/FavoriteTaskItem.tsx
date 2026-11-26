@@ -4,6 +4,7 @@ import type { FavoriteTask, ColorMode } from "../types";
 import TagsList from "./TagsList";
 import ColorDots from "./ColorDots";
 import { useTaskLabel } from "../adversum/display/taskLabel";
+import { interruptMenuEntries } from "../adversum/quickEntry/popupBridge";
 import { separator, showContextMenu, type ContextMenuEntry } from "./contextMenu";
 
 interface FavoriteTaskItemProps {
@@ -36,6 +37,8 @@ export default function FavoriteTaskItem({
     ...(onStartWithChanges
       ? [{ text: t("contextMenu.startWithChanges"), enabled: !disabled, action: () => onStartWithChanges(task) } satisfies ContextMenuEntry]
       : []),
+    // ADVERSUM: pause the running timer, start this task, resume afterwards.
+    ...interruptMenuEntries(task, t("adversum.quick.startBetween"), disabled),
     separator(),
     { text: t("favorites.removeFromFavorites"), enabled: !disabled, action: () => onRemove(task) },
   ];

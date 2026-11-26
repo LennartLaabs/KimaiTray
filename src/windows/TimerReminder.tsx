@@ -18,6 +18,8 @@ import { defaultSettings, loadSettings, onSettingsChange } from "../settings/ser
 import { useLanguageSync } from "../hooks/useLanguageSync";
 import { logger } from "../utils/logger";
 import { currentPlatform } from "../platform";
+// ADVERSUM: one-click starts for the most likely tasks.
+import ReminderSuggestions from "../adversum/quickEntry/ReminderSuggestions";
 
 function applyAppearance(settings: AppSettings) {
   document.documentElement.dataset.accent = settings.accentStyle;
@@ -240,6 +242,8 @@ export default function TimerReminder() {
         <p id="timer-reminder-description" className="mt-5 max-w-2xl text-balance text-lg leading-8 text-slate-300 sm:text-xl">
           {t("timerReminder.alertDescription", { minutes: thresholdMinutes })}
         </p>
+        {/* ADVERSUM: renders nothing unless the fork display is active. */}
+        <ReminderSuggestions onStarted={dismiss} />
         <button type="button" onClick={dismiss} className="mt-10 rounded-xl border-2 border-transparent bg-[var(--accent)] px-7 py-3 text-base font-semibold text-white transition hover:bg-[var(--accent-hover)] focus:outline-none focus-visible:border-white">
           {t("timerReminder.dismiss")}
         </button>
