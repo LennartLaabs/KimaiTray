@@ -96,7 +96,7 @@ export default function AcceleratorInput({
         aria-label={`${label}: ${t("adversum.quickSettings.record")}`}
         onClick={() => setRecording((current) => !current)}
         onBlur={() => setRecording(false)}
-        className={`inline-flex h-[31px] min-w-[120px] items-center justify-center rounded-lg border px-3 font-mono text-[12px]
+        className={`inline-flex h-[31px] min-w-[120px] items-center justify-center rounded-lg border px-3 text-[13px] tracking-wide
           focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50 ${
             recording
               ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"

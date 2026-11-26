@@ -77,7 +77,7 @@ function Suggestions({ onStarted }: ReminderSuggestionsProps) {
               <span className="block truncate text-sm font-semibold text-white">
                 {suggestion.combination.customer}
               </span>
-              <span className="block truncate text-xs text-slate-300">
+              <span className="line-clamp-2 text-xs text-slate-300">
                 {suggestion.combination.project} · {suggestion.combination.activity}
               </span>
             </span>
