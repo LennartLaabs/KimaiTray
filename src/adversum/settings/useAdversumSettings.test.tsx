@@ -66,7 +66,11 @@ describe("useAdversumSettings", () => {
     mocks.patch.mockResolvedValue({ ...dots, logoDevToken: "pk_saved" });
     const { result } = renderHook(() => useAdversumSettings());
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    await act(() => result.current.update("customerIndicator", "dots"));
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await result.current.update("customerIndicator", "dots");
+    });
+    expect(saved).toBe(true);
     expect(mocks.patch).toHaveBeenCalledWith({ customerIndicator: "dots" });
     expect(result.current.settings).toEqual({ ...dots, logoDevToken: "pk_saved" });
   });
@@ -75,7 +79,11 @@ describe("useAdversumSettings", () => {
     mocks.patch.mockRejectedValue(new Error("disk full"));
     const { result } = renderHook(() => useAdversumSettings());
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    await act(() => result.current.update("customerIndicator", "dots"));
+    let saved: boolean | undefined;
+    await act(async () => {
+      saved = await result.current.update("customerIndicator", "dots");
+    });
+    expect(saved).toBe(false);
     expect(result.current.settings.customerIndicator).toBe("logo");
     expect(mocks.loggerError).toHaveBeenCalledWith(
       "Failed to save Adversum setting customerIndicator: Error: disk full",

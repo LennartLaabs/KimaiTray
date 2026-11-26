@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./CustomerLogosSection", () => ({ default: () => <div>logos-page</div> }));
+vi.mock("./QuickEntrySection", () => ({ default: () => <div>quick-page</div> }));
 
 import { ADVERSUM_NAV, renderAdversumSection } from "./navigation";
 
@@ -23,13 +24,20 @@ describe("fork settings navigation", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         {renderAdversumSection("adversumLogos")}
+        {renderAdversumSection("adversumQuick")}
       </QueryClientProvider>,
     );
     expect(screen.getByText("logos-page")).toBeTruthy();
+    expect(screen.getByText("quick-page")).toBeTruthy();
   });
 
   it("renders nothing where no query client exists", () => {
-    const { container } = render(<>{renderAdversumSection("adversumLogos")}</>);
+    const { container } = render(
+      <>
+        {renderAdversumSection("adversumLogos")}
+        {renderAdversumSection("adversumQuick")}
+      </>,
+    );
     expect(container.innerHTML).toBe("");
   });
 });

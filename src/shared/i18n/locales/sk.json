@@ -810,6 +810,64 @@
         "none": "No logo found, showing initials",
         "pending": "Not loaded yet"
       }
+    },
+    "quick": {
+      "placeholder": "Customer, project, activity, note…",
+      "suggestions": "Suggestions",
+      "empty": "No matching combination found.",
+      "choose": "Choose with ↑↓, then press ↵",
+      "hints": "↵ start · ⌘↵ in between · ⇥ complete · esc close",
+      "since": "since {{time}}",
+      "futureTime": "Time is in the future, starts now",
+      "working": "Working…",
+      "notConnected": "Connect to Kimai in the settings first.",
+      "undo": "Undo",
+      "startBetween": "Start in between",
+      "command": {
+        "stop": "Stop the timer",
+        "pause": "Pause the timer",
+        "resume": "Resume the paused timer",
+        "previous": "Switch to the previous task"
+      },
+      "toast": {
+        "started": "▶ {{label}} started",
+        "logged": "✓ {{label}} logged",
+        "stopped": "■ {{label}} stopped",
+        "paused": "⏸ {{label}} paused",
+        "resumed": "▶ {{label}} resumed",
+        "undone": "Undone",
+        "nothing": "Nothing to do",
+        "failed": "That did not work"
+      }
+    },
+    "quickSettings": {
+      "title": "Quick entry",
+      "description": "Start tasks by typing: a floating bar on a global shortcut, and the search field at the top of the popup.",
+      "shortcuts": "Shortcuts",
+      "shortcutQuickEntry": "Open the quick entry bar",
+      "shortcutQuickEntryDescription": "Shows the floating bar on the screen the pointer is on.",
+      "shortcutPreviousTask": "Previous task",
+      "shortcutPreviousTaskDescription": "Stops the running timer and starts the task that ran before it, with its note. Pressing it again switches back.",
+      "shortcutRejected": "This shortcut could not be registered. It may be in use by the system or another app.",
+      "record": "Record shortcut",
+      "recording": "Press keys…",
+      "none": "None",
+      "clear": "Remove shortcut",
+      "aliases": "Aliases",
+      "aliasesDescription": "Extra words a customer, project or activity can be typed as, separated by commas. Example: “pm” for Projektmanagement.",
+      "aliasKind": {
+        "customers": "Customers",
+        "projects": "Projects",
+        "activities": "Activities"
+      },
+      "aliasFilter": "Filter…",
+      "aliasPlaceholder": "word, word",
+      "aliasesFor": "Aliases for {{name}}",
+      "noConnection": "Connect to Kimai to manage aliases.",
+      "noEntries": "Nothing found."
+    },
+    "reminder": {
+      "title": "Start right away"
     }
   }
 }

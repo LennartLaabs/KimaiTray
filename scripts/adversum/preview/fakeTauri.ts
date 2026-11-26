@@ -42,6 +42,13 @@ function initialStore(): Args {
     ...(params.get("layout") ? { popupLayout: params.get("layout") } : {}),
   };
   store.adversum = {
+    aliases: {
+      [CONNECTION.id]: {
+        customers: { "1": ["gigi"] },
+        projects: {},
+        activities: { "1": ["pm"], "2": ["call", "telefonat", "meeting"] },
+      },
+    },
     ...store.adversum,
     ...(params.get("indicator") ? { customerIndicator: params.get("indicator") } : {}),
   };
@@ -214,6 +221,10 @@ const commands: Record<string, (args: Args) => unknown> = {
     emit("adversum://settings-changed", store.adversum);
     return store.adversum;
   },
+  adversum_quick_show: () => dispatch("adversum://quick-shown", null),
+  adversum_quick_hide: () => console.debug("[fake tauri] quick entry bar hidden"),
+  adversum_quick_release_focus: () => null,
+  adversum_quick_resize: () => null,
   adversum_logo_list: () => customers.map((customer) => logoEntry(customer.id)),
   adversum_logo_fetch: ({ request }) => logoEntry(request.customerId),
   adversum_logo_set_manual: ({ request }) =>
@@ -255,6 +266,11 @@ Object.assign(window, {
 });
 
 document.documentElement.style.background = "#d4d4d8";
+if (windowLabel === "adversum-quick") {
+  const style = document.createElement("style");
+  style.textContent = "#root { width: 680px; margin: 80px auto; }";
+  document.head.append(style);
+}
 if (windowLabel === "tray-popup") {
   // The popup assumes its native window size.
   const style = document.createElement("style");

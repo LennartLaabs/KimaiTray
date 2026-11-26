@@ -37,6 +37,8 @@ async function renderApp() {
         ? (await import("./windows/TimerReminder")).default
         : label === "changelog"
           ? (await import("./windows/Changelog")).default
+          : label === "adversum-quick" // ADVERSUM: floating quick entry bar
+            ? (await import("./adversum/quickEntry/QuickEntryWindow")).default
       : (await import("./windows/TrayPopup")).default;
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>

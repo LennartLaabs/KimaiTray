@@ -70,6 +70,9 @@ import { separator, showContextMenu, type ContextMenuEntry } from "../components
 import QuickFilterBar from "../components/QuickFilterBar";
 import { focusNavItem, usePopupKeyboardNav } from "../tray/usePopupKeyboardNav";
 import { useQuickFilter } from "../tray/useQuickFilter";
+// ADVERSUM: quick entry bar, quick action executor and confirmation toast.
+import AdversumPopupQuick from "../adversum/quickEntry/AdversumPopupQuick";
+import { typingToQuickEntry } from "../adversum/quickEntry/popupBridge";
 
 export default function TrayPopup() {
   const { t } = useTranslation();
@@ -712,10 +715,11 @@ export default function TrayPopup() {
     enabled: !showNewTask && !editingEntry && !!client,
     containerRef: navContainerRef,
     onFilterStart: filterAvailable
-      ? (text) => {
+      ? // ADVERSUM: typing goes to the quick entry bar when it is present.
+        typingToQuickEntry((text) => {
           if (popupLayout === "focus") setFocusTab("recent");
           setFilterQuery(text);
-        }
+        })
       : undefined,
     onStartFavorite: (index) => {
       const favorite = quickFilter.favorites[index];
@@ -773,6 +777,23 @@ export default function TrayPopup() {
           onInstall={() => updater.install?.()}
         />
       )}
+
+      {/* ADVERSUM: renders nothing unless the fork display is active. */}
+      <AdversumPopupQuick
+        client={client}
+        connectionId={activeConnectionId}
+        timersReady={status === "connected"}
+        timers={timers}
+        pausedTimers={pausedTimers}
+        recentTasks={tasks}
+        busy={timerActionsDisabled}
+        startTask={startTask}
+        pauseTimer={pauseTimer}
+        resumeTimer={resumeTimer}
+        discardPausedTimer={discardPausedTimer}
+        stopActiveTimer={stopActiveTimer}
+        hidden={showNewTask}
+      />
 
       {showNewTask && client ? (
         <NewTaskForm

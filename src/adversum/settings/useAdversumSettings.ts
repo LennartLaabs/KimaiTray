@@ -11,11 +11,15 @@ import {
 interface UseAdversumSettingsResult {
   settings: AdversumSettings;
   loaded: boolean;
-  /** Applies the value immediately and persists it; reverts when saving fails. */
+  /**
+   * Applies the value immediately and persists it. Resolves to `false`, with
+   * the value reverted, when saving fails (for example a shortcut the system
+   * refuses).
+   */
   update: <K extends keyof AdversumSettings>(
     key: K,
     value: AdversumSettings[K],
-  ) => Promise<void>;
+  ) => Promise<boolean>;
 }
 
 /** Fork settings for one window, kept in step with every other window. */
@@ -35,6 +39,7 @@ export function useAdversumSettings(): UseAdversumSettingsResult {
     const unlisten = onAdversumSettingsChange((next) => {
       if (active) setSettings(next);
     });
+    unlisten.catch(() => undefined);
     return () => {
       active = false;
       void unlisten.then((cleanup) => cleanup()).catch(() => undefined);
@@ -47,9 +52,11 @@ export function useAdversumSettings(): UseAdversumSettingsResult {
       setSettings({ ...previous, [key]: value });
       try {
         setSettings(await patchAdversumSettings({ [key]: value }));
+        return true;
       } catch (error) {
         logger.error(`Failed to save Adversum setting ${key}: ${String(error)}`);
         setSettings(previous);
+        return false;
       }
     },
     [],

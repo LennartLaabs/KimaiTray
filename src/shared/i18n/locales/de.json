@@ -810,6 +810,64 @@
         "none": "Kein Logo gefunden, Initialen werden gezeigt",
         "pending": "Noch nicht geladen"
       }
+    },
+    "quick": {
+      "placeholder": "Kunde, Projekt, Aktivität, Notiz …",
+      "suggestions": "Vorschläge",
+      "empty": "Keine passende Kombination gefunden.",
+      "choose": "Mit ↑↓ auswählen, dann ↵",
+      "hints": "↵ starten · ⌘↵ zwischendurch · ⇥ übernehmen · esc schließen",
+      "since": "seit {{time}}",
+      "futureTime": "Zeit liegt in der Zukunft, startet jetzt",
+      "working": "Wird ausgeführt …",
+      "notConnected": "Erst in den Einstellungen mit Kimai verbinden.",
+      "undo": "Rückgängig",
+      "startBetween": "Zwischendurch starten",
+      "command": {
+        "stop": "Timer stoppen",
+        "pause": "Timer pausieren",
+        "resume": "Pausierten Timer fortsetzen",
+        "previous": "Zur vorherigen Aufgabe wechseln"
+      },
+      "toast": {
+        "started": "▶ {{label}} gestartet",
+        "logged": "✓ {{label}} eingetragen",
+        "stopped": "■ {{label}} gestoppt",
+        "paused": "⏸ {{label}} pausiert",
+        "resumed": "▶ {{label}} fortgesetzt",
+        "undone": "Rückgängig gemacht",
+        "nothing": "Nichts zu tun",
+        "failed": "Das hat nicht geklappt"
+      }
+    },
+    "quickSettings": {
+      "title": "Schnellstart",
+      "description": "Aufgaben per Texteingabe starten: als schwebende Leiste über ein globales Tastenkürzel und als Suchfeld oben im Popup.",
+      "shortcuts": "Tastenkürzel",
+      "shortcutQuickEntry": "Schnellstart-Leiste öffnen",
+      "shortcutQuickEntryDescription": "Zeigt die schwebende Leiste auf dem Bildschirm, auf dem der Mauszeiger ist.",
+      "shortcutPreviousTask": "Vorherige Aufgabe",
+      "shortcutPreviousTaskDescription": "Stoppt den laufenden Timer und startet die davor gelaufene Aufgabe samt Notiz. Nochmal drücken wechselt wieder zurück.",
+      "shortcutRejected": "Dieses Tastenkürzel konnte nicht registriert werden. Möglicherweise nutzt es das System oder eine andere App.",
+      "record": "Tastenkürzel aufnehmen",
+      "recording": "Tasten drücken …",
+      "none": "Keins",
+      "clear": "Tastenkürzel entfernen",
+      "aliases": "Aliasse",
+      "aliasesDescription": "Zusätzliche Wörter, unter denen ein Kunde, ein Projekt oder eine Aktivität getippt werden kann, durch Kommas getrennt. Beispiel: „pm“ für Projektmanagement.",
+      "aliasKind": {
+        "customers": "Kunden",
+        "projects": "Projekte",
+        "activities": "Aktivitäten"
+      },
+      "aliasFilter": "Filtern …",
+      "aliasPlaceholder": "Wort, Wort",
+      "aliasesFor": "Aliasse für {{name}}",
+      "noConnection": "Mit Kimai verbinden, um Aliasse zu pflegen.",
+      "noEntries": "Nichts gefunden."
+    },
+    "reminder": {
+      "title": "Direkt starten"
     }
   }
 }

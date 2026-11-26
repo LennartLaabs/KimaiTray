@@ -241,6 +241,10 @@ pub fn run() {
             adversum::logos::adversum_logo_fetch,
             adversum::logos::adversum_logo_set_manual,
             adversum::logos::adversum_logo_clear_manual,
+            adversum::quick::adversum_quick_show,
+            adversum::quick::adversum_quick_hide,
+            adversum::quick::adversum_quick_release_focus,
+            adversum::quick::adversum_quick_resize,
         ])
         .setup(|app| {
             info!(
@@ -290,6 +294,8 @@ pub fn run() {
                 }
             }
             shortcuts::register_from_store(app.handle());
+            // ADVERSUM: the fork's own startup work.
+            adversum::setup(app.handle());
 
             // Surface the popup for every protocol activation that reaches an
             // already-running instance. On macOS a warm-start URL is delivered

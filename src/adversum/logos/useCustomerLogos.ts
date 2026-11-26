@@ -98,6 +98,7 @@ export function useCustomerLogos({
     const unlisten = onLogoChange((change) => {
       mergeEntry(change.connectionId, change.customerId, change.entry);
     });
+    unlisten.catch(() => undefined);
     return () => {
       void unlisten.then((cleanup) => cleanup()).catch(() => undefined);
     };

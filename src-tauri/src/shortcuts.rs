@@ -149,6 +149,9 @@ fn register_handlers(app: &AppHandle, shortcuts: &ShortcutSet) -> Result<(), Str
         info!("Registered open-settings shortcut: {open_settings}");
     }
 
+    // ADVERSUM: `unregister_all` above also released the fork's shortcuts.
+    crate::adversum::shortcuts::register(app);
+
     Ok(())
 }
 

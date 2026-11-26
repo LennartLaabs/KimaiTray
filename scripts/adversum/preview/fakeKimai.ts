@@ -212,6 +212,11 @@ export function handleKimaiRequest(method: string, url: URL, rawBody: string | u
   if (method === "PATCH" && !action) {
     if (typeof body.begin === "string") target.begin = kimaiDate(parseWritten(body.begin));
     if (typeof body.end === "string") target.end = kimaiDate(parseWritten(body.end));
+    if (body.end === null) {
+      // Clearing the end lets the entry run again.
+      target.end = null;
+      target.duration = null;
+    }
     if (typeof body.description === "string") target.description = body.description;
     if (typeof body.project === "number") target.project = body.project;
     if (typeof body.activity === "number") target.activity = body.activity;

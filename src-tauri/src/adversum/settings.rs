@@ -79,7 +79,17 @@ pub fn adversum_patch_settings(
         Some(Value::Object(settings)) => settings,
         _ => Map::new(),
     };
+    let previous_shortcuts = super::shortcuts::configured(&settings);
     apply_patch(&mut settings, values)?;
+    let shortcuts = super::shortcuts::configured(&settings);
+    if shortcuts != previous_shortcuts {
+        // Register first: a shortcut the system refuses must not be saved.
+        if let Err(error) = super::shortcuts::register_with(&app, &shortcuts.0, &shortcuts.1) {
+            let (quick_entry, previous_task) = previous_shortcuts;
+            let _ = super::shortcuts::register_with(&app, &quick_entry, &previous_task);
+            return Err(error);
+        }
+    }
     let value = Value::Object(settings);
     persist_store_value(store.as_ref(), SETTINGS_KEY, Some(value.clone()))?;
     // Persistence is authoritative; a failed broadcast must not fail the save.

@@ -223,4 +223,5 @@ export type SettingsSection =
   | "test"
   | "about"
   // ADVERSUM: fork settings pages.
+  | "adversumQuick"
   | "adversumLogos";

@@ -59,6 +59,21 @@
         "transparent": true
       },
       {
+        "label": "adversum-quick",
+        "title": "KimaiTray — Quick Entry",
+        "url": "/",
+        "width": 680,
+        "height": 76,
+        "visible": false,
+        "decorations": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "shadow": false,
+        "transparent": true,
+        "focus": false
+      },
+      {
         "label": "changelog",
         "title": "KimaiTray — What's New",
         "url": "/",
