@@ -20,6 +20,8 @@ export const PREVIOUS_TASK_EVENT = "adversum://previous-task";
 
 export interface QuickExecuteRequest {
   action: QuickAction;
+  /** Shown with the confirmation: what voice input learned from a correction. */
+  learned?: string;
 }
 
 export type QuickToastKind =
@@ -28,6 +30,7 @@ export type QuickToastKind =
   | "stopped"
   | "paused"
   | "resumed"
+  | "noted"
   | "undone"
   | "nothing"
   | "failed";
@@ -40,6 +43,8 @@ export interface QuickToastData {
   label: string;
   /** Whether "Undo" is offered. */
   undoable: boolean;
+  /** A second line: aliases learned along the way. */
+  detail?: string;
 }
 
 export interface QuickUndoRequest {

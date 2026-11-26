@@ -842,6 +842,7 @@
         "stopped": "■ {{label}} gestoppt",
         "paused": "⏸ {{label}} pausiert",
         "resumed": "▶ {{label}} fortgesetzt",
+        "noted": "✎ Notiz bei {{label}} ergänzt",
         "undone": "Rückgängig gemacht",
         "nothing": "Nichts zu tun",
         "failed": "Das hat nicht geklappt"
@@ -875,6 +876,79 @@
     },
     "reminder": {
       "title": "Direkt starten"
+    },
+    "voice": {
+      "title": "Sprachsteuerung",
+      "description": "Taste halten, sagen, woran du arbeitest, loslassen: Der passende Timer startet. Die Erkennung läuft vollständig auf diesem Mac.",
+      "speak": "Per Sprache eingeben",
+      "listening": "Ich höre zu …",
+      "hintHold": "Loslassen zum Auswerten · esc bricht ab",
+      "hintManual": "↵ oder „Fertig“ zum Auswerten · esc bricht ab",
+      "done": "Fertig",
+      "transcribing": "Wird ausgewertet …",
+      "addNote": "Notiz am laufenden Timer ergänzen",
+      "hintAuto": "Startet gleich von selbst · ↵ sofort · ↑↓ ändern · esc verwerfen",
+      "hintConfirm": "↵ starten · ⌘↵ zwischendurch · ⇥ von Hand ändern · esc verwerfen",
+      "learned": "Gemerkt: {{aliases}}",
+      "openPrivacy": "Systemeinstellungen öffnen",
+      "problem": {
+        "empty": "Nichts verstanden. Bitte noch einmal sprechen.",
+        "disabled": "Die Sprachsteuerung ist ausgeschaltet (Einstellungen → Sprachsteuerung).",
+        "noModel": "Das Sprachmodell fehlt noch (Einstellungen → Sprachsteuerung).",
+        "permissionDenied": "Kein Zugriff auf das Mikrofon.",
+        "permissionRequested": "Bitte den Mikrofon-Zugriff erlauben und dann noch einmal sprechen.",
+        "noMicrophone": "Kein Mikrofon gefunden.",
+        "failed": "Die Spracherkennung ist fehlgeschlagen."
+      },
+      "settings": {
+        "unsupported": "Die Sprachsteuerung gibt es bisher nur unter macOS.",
+        "enable": "Sprachsteuerung einschalten",
+        "enableDescription": "Beim ersten Einschalten wird das gewählte Sprachmodell geladen. Danach braucht die Erkennung kein Internet.",
+        "microphone": "Mikrofon",
+        "permission": {
+          "granted": "Zugriff erlaubt.",
+          "denied": "Zugriff verweigert. Erlaube „KimaiTray Adversum“ in den Systemeinstellungen unter Datenschutz & Sicherheit → Mikrofon.",
+          "undetermined": "macOS fragt beim ersten Mal nach dem Zugriff."
+        },
+        "requestPermission": "Zugriff anfragen",
+        "model": "Sprachmodell",
+        "modelDescription": "Größere Modelle verstehen genauer, brauchen aber mehr Speicher und etwas länger.",
+        "models": {
+          "base": {
+            "name": "Base",
+            "note": "Am schnellsten, für klare Aussprache und kurze Namen."
+          },
+          "small": {
+            "name": "Small",
+            "note": "Empfohlen: gute Erkennung bei kurzer Wartezeit."
+          },
+          "large-v3-turbo": {
+            "name": "Large v3 Turbo",
+            "note": "Am genauesten, braucht am meisten Speicher."
+          }
+        },
+        "installed": "Geladen",
+        "download": "Laden",
+        "downloadLabel": "{{name}} laden",
+        "downloading": "{{percent}} %",
+        "cancel": "Abbrechen",
+        "delete": "Löschen",
+        "deleteLabel": "{{name}} löschen",
+        "downloadFailed": "Der Download ist fehlgeschlagen. Bitte Internetverbindung und freien Speicher prüfen und noch einmal versuchen.",
+        "folder": "Speicherort der Modelle",
+        "folderDescription": "Schon geladene Modelle werden beim Wechsel nicht verschoben.",
+        "used": "Belegt: {{size}}.",
+        "chooseFolder": "Ordner wählen …",
+        "resetFolder": "Standard",
+        "folderRejected": "Dieser Ordner kann nicht verwendet werden.",
+        "trigger": "Auslöser",
+        "shortcut": "Sprachtaste",
+        "shortcutDescription": "Gedrückt halten und sprechen; beim Loslassen wird ausgewertet.",
+        "shortcutTapDescription": "Einmal drücken startet die Aufnahme, noch einmal drücken wertet aus.",
+        "tapMode": "Tippen statt Halten",
+        "tapModeDescription": "Für längere Sätze oder wenn sich die Tastenkombination schlecht halten lässt.",
+        "privacy": "Aufnahmen werden nur auf diesem Mac ausgewertet und nicht gespeichert. Ins Internet geht nichts außer dem einmaligen Laden des Sprachmodells."
+      }
     }
   }
 }

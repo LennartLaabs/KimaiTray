@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./CustomerLogosSection", () => ({ default: () => <div>logos-page</div> }));
 vi.mock("./QuickEntrySection", () => ({ default: () => <div>quick-page</div> }));
+vi.mock("./VoiceSection", () => ({ default: () => <div>voice-page</div> }));
 
 import { ADVERSUM_NAV, renderAdversumSection } from "./navigation";
 
@@ -25,10 +26,12 @@ describe("fork settings navigation", () => {
       <QueryClientProvider client={new QueryClient()}>
         {renderAdversumSection("adversumLogos")}
         {renderAdversumSection("adversumQuick")}
+        {renderAdversumSection("adversumVoice")}
       </QueryClientProvider>,
     );
     expect(screen.getByText("logos-page")).toBeTruthy();
     expect(screen.getByText("quick-page")).toBeTruthy();
+    expect(screen.getByText("voice-page")).toBeTruthy();
   });
 
   it("renders nothing where no query client exists", () => {
@@ -36,6 +39,7 @@ describe("fork settings navigation", () => {
       <>
         {renderAdversumSection("adversumLogos")}
         {renderAdversumSection("adversumQuick")}
+        {renderAdversumSection("adversumVoice")}
       </>,
     );
     expect(container.innerHTML).toBe("");

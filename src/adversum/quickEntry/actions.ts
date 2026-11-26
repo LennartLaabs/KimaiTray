@@ -43,7 +43,9 @@ export type QuickAction =
       end: string;
       label: string;
     }
-  | { type: "command"; command: QuickCommand };
+  | { type: "command"; command: QuickCommand }
+  /** Adds a line to the note of the running timer (voice: "Notiz: …"). */
+  | { type: "note"; text: string };
 
 /** The action that starts (or logs) a suggestion with the recognized time. */
 export function actionForSuggestion(

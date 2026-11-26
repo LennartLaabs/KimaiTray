@@ -24,5 +24,13 @@ State (settings, favorites, timesheets) lives in `localStorage`, so several
 tabs behave like several app windows and events are passed between them.
 Unknown native commands are logged to the console as `[fake tauri] unhandled`.
 
-Limits: native menus, global shortcuts, window positioning and the real logo
-download do not exist here. Logos are generated sample images.
+Voice input is simulated: switch it on in the settings page (the "download"
+is a timer and fills no disk), then use the microphone button of the quick
+entry bar. "Recording" plays a level curve; "Done" returns one of a few sample
+sentences in turn, or the one you pass as `say=…` in the URL of the
+`adversum-quick` tab. No microphone and no speech model are involved, so this
+shows the overlay, the confirmation card and learning, not recognition.
+
+Limits: native menus, global shortcuts, window positioning, speech recognition
+and the real logo download do not exist here. Logos are generated sample
+images.

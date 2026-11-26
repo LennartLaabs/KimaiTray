@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAdversumDisplay } from "../display/displayStore";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
+import { buildVocabulary } from "../voice/vocabulary";
+import { setVoiceVocabulary, startVoice } from "../voice/voiceApi";
 import { registerPopupQuick, type BridgeTask } from "./popupBridge";
 import QuickEntryBar from "./QuickEntryBar";
 import { useQuickEntryData } from "./useQuickEntryData";
@@ -34,6 +36,17 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
   const [focus, setFocus] = useState({ request: 0, text: "" });
   const executeRef = useRef(execute);
   executeRef.current = execute;
+
+  // The tray window lives as long as the app, so it keeps the speech model's
+  // vocabulary current: every name that can be started, and the aliases.
+  const aliases = settings.aliases[options.connectionId];
+  const vocabulary = useMemo(
+    () => (settings.voiceEnabled ? buildVocabulary(catalog, aliases) : ""),
+    [settings.voiceEnabled, catalog, aliases],
+  );
+  useEffect(() => {
+    if (vocabulary) void setVoiceVocabulary(vocabulary).catch(() => undefined);
+  }, [vocabulary]);
 
   useEffect(() => {
     registerPopupQuick({
@@ -73,6 +86,9 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
       disabled={options.busy}
       onAction={(action) => void execute(action)}
       onClose={() => (document.activeElement as HTMLElement | null)?.blur()}
+      onVoice={
+        settings.voiceEnabled ? () => void startVoice().catch(() => undefined) : undefined
+      }
     />
   );
 }

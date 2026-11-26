@@ -35,6 +35,11 @@ describe("normalizeAdversumSettings", () => {
         logoDevToken: "  pk_abc  ",
         shortcutQuickEntry: "",
         shortcutPreviousTask: "Alt+B",
+        voiceEnabled: true,
+        voiceModel: "large-v3-turbo",
+        voiceModelDir: "/Volumes/Extern/Modelle",
+        voiceTapMode: true,
+        shortcutVoice: "Alt+F5",
       }),
     ).toEqual({
       customerIndicator: "dots",
@@ -42,6 +47,11 @@ describe("normalizeAdversumSettings", () => {
       shortcutQuickEntry: "",
       shortcutPreviousTask: "Alt+B",
       aliases: {},
+      voiceEnabled: true,
+      voiceModel: "large-v3-turbo",
+      voiceModelDir: "/Volumes/Extern/Modelle",
+      voiceTapMode: true,
+      shortcutVoice: "Alt+F5",
     });
     expect(
       normalizeAdversumSettings({
@@ -49,8 +59,20 @@ describe("normalizeAdversumSettings", () => {
         logoDevToken: "x".repeat(129),
         shortcutQuickEntry: 5,
         shortcutPreviousTask: "y".repeat(257),
+        voiceEnabled: "yes",
+        voiceModel: "tiny",
+        voiceModelDir: 7,
+        voiceTapMode: 1,
+        shortcutVoice: null,
       }),
     ).toEqual(defaultAdversumSettings);
+    expect(defaultAdversumSettings).toMatchObject({
+      voiceEnabled: false,
+      voiceModel: "small",
+      voiceModelDir: "",
+      voiceTapMode: false,
+      shortcutVoice: "Control+Alt+V",
+    });
   });
 
   it("cleans alias lists per connection and entity", () => {

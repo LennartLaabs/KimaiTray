@@ -1,13 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useAdversumDisplay } from "../display/displayStore";
-import CustomerAvatar from "../logos/CustomerAvatar";
+import MicIcon from "../voice/MicIcon";
 import { actionForSuggestion, type QuickAction, type QuickStartMode } from "./actions";
 import type { QuickCatalog } from "./catalog";
 import type { QuickHistory } from "./history";
 import { parseQuickEntry, type QuickSuggestion } from "./parse";
-import type { TimeSpec } from "./timeParser";
+import { CommandContent, QuickRow, SuggestionContent } from "./SuggestionRow";
 
 interface QuickEntryBarProps {
   catalog: QuickCatalog;
@@ -21,10 +20,8 @@ interface QuickEntryBarProps {
   onAction: (action: QuickAction) => void;
   /** Escape on an empty field. */
   onClose: () => void;
-}
-
-function clockTime(date: Date): string {
-  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  /** Shows a microphone button that starts voice input. */
+  onVoice?: () => void;
 }
 
 /** The text that names a suggestion unambiguously, for Tab completion. */
@@ -42,9 +39,9 @@ export default function QuickEntryBar({
   disabled = false,
   onAction,
   onClose,
+  onVoice,
 }: QuickEntryBarProps) {
   const { t } = useTranslation();
-  const display = useAdversumDisplay();
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -149,6 +146,19 @@ export default function QuickEntryBar({
             windowed ? "text-[17px]" : "text-xs"
           }`}
         />
+        {onVoice && (
+          <button
+            type="button"
+            aria-label={t("adversum.voice.speak")}
+            title={t("adversum.voice.speak")}
+            // Keeps the field focused until voice input takes over.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onVoice}
+            className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-black/5 hover:text-[var(--accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] dark:text-gray-500 dark:hover:bg-white/10"
+          >
+            <MicIcon className={windowed ? "h-5 w-5" : "h-3.5 w-3.5"} />
+          </button>
+        )}
         {windowed && (
           <kbd className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 font-mono text-[10px] text-gray-400 dark:border-gray-700 dark:text-gray-500">
             esc
@@ -168,55 +178,25 @@ export default function QuickEntryBar({
           }
         >
           {command ? (
-            <Row
+            <QuickRow
               id={`${listId}-0`}
               selected={selected === 0}
               onSelect={() => setSelected(0)}
               onRun={() => submit(0, "switch")}
             >
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] text-gray-600 dark:bg-white/10 dark:text-gray-300">
-                ⌘
-              </span>
-              <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                {t(`adversum.quick.command.${command}`)}
-              </span>
-            </Row>
+              <CommandContent command={command} />
+            </QuickRow>
           ) : (
             suggestions.map((suggestion, index) => (
-              <Row
+              <QuickRow
                 key={suggestion.combination.key}
                 id={`${listId}-${index}`}
                 selected={selected === index}
                 onSelect={() => setSelected(index)}
                 onRun={(mode) => submit(index, mode)}
               >
-                <CustomerAvatar
-                  name={suggestion.combination.customer}
-                  color={suggestion.combination.customerColor}
-                  logo={display?.logos.get(suggestion.combination.customerId)}
-                  size={20}
-                  dotColor={suggestion.combination.activityColor || undefined}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-200">
-                    {suggestion.combination.customer}
-                  </span>
-                  <span className="block truncate text-[10px] text-gray-500 dark:text-gray-400">
-                    {suggestion.combination.project} · {suggestion.combination.activity}
-                  </span>
-                </span>
-                <span className="flex max-w-[45%] shrink-0 items-center gap-1">
-                  {suggestion.note && (
-                    <span
-                      data-chip="note"
-                      className="truncate rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-white/10 dark:text-gray-300"
-                    >
-                      {suggestion.note}
-                    </span>
-                  )}
-                  <TimeChip time={result.time} />
-                </span>
-              </Row>
+                <SuggestionContent suggestion={suggestion} time={result.time} />
+              </QuickRow>
             ))
           )}
           {rowCount === 0 && (
@@ -231,58 +211,6 @@ export default function QuickEntryBar({
           </p>
         </div>
       )}
-    </div>
-  );
-}
-
-function TimeChip({ time }: { time: TimeSpec }) {
-  const { t } = useTranslation();
-  if (time.kind === "none") return null;
-  const warning = time.kind === "future";
-  return (
-    <span
-      data-chip="time"
-      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] tabular-nums ${
-        warning
-          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
-          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
-      }`}
-    >
-      {time.kind === "start"
-        ? t("adversum.quick.since", { time: clockTime(time.begin) })
-        : time.kind === "range"
-          ? `${clockTime(time.begin)}–${clockTime(time.end)}`
-          : t("adversum.quick.futureTime")}
-    </span>
-  );
-}
-
-interface RowProps {
-  id: string;
-  selected: boolean;
-  onSelect: () => void;
-  onRun: (mode: QuickStartMode) => void;
-  children: React.ReactNode;
-}
-
-function Row({ id, selected, onSelect, onRun, children }: RowProps) {
-  return (
-    <div
-      id={id}
-      role="option"
-      aria-selected={selected}
-      tabIndex={-1}
-      onMouseMove={onSelect}
-      onMouseDown={(event) => {
-        // Keep the text field focused; a blur would close the list first.
-        event.preventDefault();
-        onRun(event.metaKey || event.ctrlKey ? "interrupt" : "switch");
-      }}
-      className={`flex cursor-default items-center gap-2.5 rounded-md px-2.5 py-1.5 ${
-        selected ? "bg-[var(--accent-light)]" : ""
-      }`}
-    >
-      {children}
     </div>
   );
 }

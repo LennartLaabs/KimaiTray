@@ -109,6 +109,7 @@ Then open `http://localhost:1420/scripts/adversum/preview/index.html`. Query par
 - `npm run i18n:check` compares all six locales against `en.json`, including `{{placeholders}}`. We translate `en` and `de` by hand; the other four get the English text through `i18n-sync.mjs`.
 - `npm run version:check` requires identical versions in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`.
 - ESLint runs with `--max-warnings=0`.
+- The Rust build compiles whisper.cpp and needs `cmake` (`brew install cmake`). The first build after `cargo clean` takes a few minutes longer because of it.
 - The original KimaiTray may be installed and running on this Mac. Both apps register the `kimaitray://` deep-link scheme; do not test deep links while both are installed.
 
 ## Merging upstream
@@ -142,4 +143,5 @@ Documented per feature in `src/adversum/README.md`, including every hook into up
 - `src/adversum/AdversumBridge.tsx` (mounted in `main.tsx` next to the window component) fills the module-level display store (`display/displayStore.ts`). Upstream components read it through hooks such as `useCustomerIndicator` and `useTaskLabel`. The store is empty in upstream's tests, so upstream tests run unchanged.
 - Customer logos: fetched, validated, converted and cached in `src-tauri/src/adversum/logos.rs`, shown by `src/adversum/logos/CustomerAvatar.tsx`, managed in the settings page `src/adversum/settings/CustomerLogosSection.tsx`.
 - Quick entry: pure parser and ranking in `src/adversum/quickEntry/` (`parse.ts` and friends), one bar component for the floating window (`QuickEntryWindow.tsx`, window label `adversum-quick`) and the popup's search field. Quick actions are always executed in the tray window by `useQuickExecutor`, which reuses upstream's timer operations; other windows send `adversum://quick-execute` events to it. The native window and the fork's global shortcuts live in `src-tauri/src/adversum/quick.rs`, `quick_panel.rs` and `shortcuts.rs`.
+- Voice input: recording (cpal), transcription (whisper.cpp through whisper-rs, German, local) and speech models in `src-tauri/src/adversum/voice/`; reading the sentence in `src/adversum/voice/spoken.ts`, which feeds the quick entry parser's spoken mode; overlay and confirmation card in `src/adversum/voice/VoiceStage.tsx`, shown by the quick entry window. Actions run through the same executor.
 - Task switching: "previous task" shortcut, "start in between" with automatic resume, and one-click suggestions on the no-timer reminder, all built on the same executor.

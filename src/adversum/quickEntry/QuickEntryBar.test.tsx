@@ -324,6 +324,45 @@ describe("QuickEntryBar", () => {
   });
 });
 
+describe("microphone button", () => {
+  it("is only there when voice input is on, and starts it without taking the focus", () => {
+    const { rerender } = renderBar();
+    expect(screen.queryByRole("button", { name: "adversum.voice.speak" })).toBeNull();
+
+    const onVoice = vi.fn();
+    rerender(
+      <QuickEntryBar
+        catalog={catalog}
+        history={history}
+        variant="window"
+        onAction={onAction}
+        onClose={onClose}
+        onVoice={onVoice}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "adversum.voice.speak" });
+    expect(button.querySelector("svg")?.getAttribute("class")).toContain("h-5");
+    // The press must not blur the text field.
+    expect(fireEvent.mouseDown(button)).toBe(false);
+    fireEvent.click(button);
+    expect(onVoice).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <QuickEntryBar
+        catalog={catalog}
+        history={history}
+        variant="popup"
+        onAction={onAction}
+        onClose={onClose}
+        onVoice={onVoice}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "adversum.voice.speak" }).querySelector("svg")?.getAttribute("class"),
+    ).toContain("h-3.5");
+  });
+});
+
 describe("QuickToast", () => {
   const toast = { id: 4, kind: "started" as const, label: "DUSW · Projektmanagement", undoable: true };
 
@@ -349,5 +388,16 @@ describe("QuickToast", () => {
       <QuickToast toast={{ ...failed, kind: "stopped", label: "x" }} onUndo={vi.fn()} undoKey="⌘Z" />,
     );
     expect(screen.getByText("adversum.quick.toast.stopped:x").className).not.toContain("red");
+  });
+
+  it("adds a line for what voice input learned", () => {
+    const { container, rerender } = render(
+      <QuickToast toast={{ ...toast, detail: "„kaka“ = K&K" }} onUndo={vi.fn()} undoKey="⌘Z" />,
+    );
+    expect(container.querySelector("[data-toast-detail]")?.textContent).toBe(
+      "adversum.voice.learned:„kaka“ = K&K",
+    );
+    rerender(<QuickToast toast={toast} onUndo={vi.fn()} undoKey="⌘Z" />);
+    expect(container.querySelector("[data-toast-detail]")).toBeNull();
   });
 });

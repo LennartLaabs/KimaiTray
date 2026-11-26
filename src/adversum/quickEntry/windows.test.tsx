@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => ({
   useQuickExecutor: vi.fn(),
   loggerError: vi.fn(),
   os: "macos",
+  startVoice: vi.fn(),
+  cancelVoice: vi.fn(),
+  learnAlias: vi.fn(),
+  setVoiceVocabulary: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -56,6 +60,13 @@ vi.mock("../../settings/service", () => ({
   onSettingsChange: mocks.onSettingsChange,
 }));
 vi.mock("./useQuickExecutor", () => ({ useQuickExecutor: mocks.useQuickExecutor }));
+vi.mock("../voice/voiceApi", async (original) => ({
+  ...(await original<typeof import("../voice/voiceApi")>()),
+  startVoice: mocks.startVoice,
+  cancelVoice: mocks.cancelVoice,
+  learnAlias: mocks.learnAlias,
+  setVoiceVocabulary: mocks.setVoiceVocabulary,
+}));
 vi.mock("../../utils/logger", () => ({ logger: { error: mocks.loggerError } }));
 vi.mock("../../platform", () => ({ currentPlatform: () => ({ os: mocks.os }) }));
 
@@ -70,6 +81,7 @@ import {
   QUICK_UNDO_EVENT,
   TOAST_DURATION_MS,
 } from "./quickEvents";
+import { VOICE_STATE_EVENT } from "../voice/voiceApi";
 import { useQuickEntryData } from "./useQuickEntryData";
 import { useQuickTheme } from "./useQuickTheme";
 
@@ -131,9 +143,13 @@ beforeEach(() => {
     return vi.fn();
   });
   mocks.os = "macos";
-  for (const mock of [mocks.hideQuickWindow, mocks.showQuickToast, mocks.resizeQuickWindow, mocks.emitTo]) {
+  for (const mock of [
+    mocks.hideQuickWindow, mocks.showQuickToast, mocks.resizeQuickWindow, mocks.emitTo,
+    mocks.startVoice, mocks.cancelVoice, mocks.setVoiceVocabulary,
+  ]) {
     mock.mockResolvedValue(undefined);
   }
+  mocks.learnAlias.mockResolvedValue(true);
   mocks.loadSettings.mockResolvedValue({ theme: "dark", accentStyle: "purple" });
   mocks.onSettingsChange.mockResolvedValue(vi.fn());
   mocks.executor = { execute: vi.fn().mockResolvedValue(undefined), undo: vi.fn().mockResolvedValue(undefined), toast: null };
@@ -277,6 +293,31 @@ describe("AdversumPopupQuick", () => {
     expect(last.preview).not.toHaveProperty("description");
   });
 
+  it("has no microphone and sets no vocabulary while voice input is off", async () => {
+    setAdversumDisplay(display);
+    render(<AdversumPopupQuick {...options} />, { wrapper });
+    await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "adversum.voice.speak" })).toBeNull();
+    expect(mocks.setVoiceVocabulary).not.toHaveBeenCalled();
+  });
+
+  it("offers the microphone and keeps the speech vocabulary current", async () => {
+    mocks.settings = {
+      settings: { ...(mocks.settings.settings as object), voiceEnabled: true },
+    };
+    mocks.setVoiceVocabulary.mockRejectedValue(new Error("not the tray window"));
+    mocks.startVoice.mockRejectedValue(new Error("no microphone"));
+    setAdversumDisplay(display);
+    render(<AdversumPopupQuick {...options} />, { wrapper });
+    await waitFor(() =>
+      expect(mocks.setVoiceVocabulary).toHaveBeenCalledWith(
+        "Projekte: Retainer, Social. Tätigkeiten: Projektmanagement. Kürzel: pm. Kunden: DUSW, Herosmile.",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "adversum.voice.speak" }));
+    expect(mocks.startVoice).toHaveBeenCalledTimes(1);
+  });
+
   it("shows nothing behind the new-task form, but keeps executing", () => {
     setAdversumDisplay(display);
     const { container } = render(<AdversumPopupQuick {...options} hidden busy />, { wrapper });
@@ -289,7 +330,7 @@ describe("AdversumPopupQuick", () => {
 describe("QuickEntryWindow", () => {
   async function renderWindow() {
     const view = render(<QuickEntryWindow />, { wrapper });
-    await waitFor(() => expect(Object.keys(windowHandlers)).toHaveLength(2));
+    await waitFor(() => expect(Object.keys(windowHandlers)).toHaveLength(3));
     return view;
   }
 
@@ -392,6 +433,128 @@ describe("QuickEntryWindow", () => {
     act(() => focusHandler({ payload: false }));
     expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("status")).toBeTruthy();
+  });
+
+  describe("voice input", () => {
+    /** Delivers a transcribed sentence once the catalog is there to match it. */
+    async function hear(text: string) {
+      await renderWindow();
+      await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({ payload: { phase: "result", manual: false, text } }),
+      );
+      await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    }
+
+    /** The first row (DUSW, by history) is preselected; Herosmile is the second. */
+    function chooseHerosmile() {
+      fireEvent.keyDown(window, { key: "ArrowDown" });
+      expect(screen.getByRole("option", { selected: true }).textContent).toContain("Herosmile");
+    }
+
+    it("takes the bar's place and closes like it", async () => {
+      const { container } = await renderWindow();
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({ payload: { phase: "recording", manual: false } }),
+      );
+      expect(container.querySelector("[data-quick-stage='voice']")).not.toBeNull();
+      expect(container.querySelector("[data-voice-phase='recording']")).not.toBeNull();
+
+      // A confirmation from elsewhere does not interrupt the recording.
+      act(() => windowHandlers[QUICK_TOAST_EVENT]!({ payload: started }));
+      expect(container.querySelector("[data-voice-phase='recording']")).not.toBeNull();
+
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({ payload: { phase: "transcribing", manual: false } }),
+      );
+      expect(container.querySelector("[data-voice-phase='transcribing']")).not.toBeNull();
+
+      // Clicking elsewhere hides the window, which also ends the recording.
+      act(() => focusHandler({ payload: false }));
+      expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
+      expect(container.querySelector("[data-quick-stage='idle']")).not.toBeNull();
+    });
+
+    it("runs what was understood and stores what a correction taught", async () => {
+      mocks.learnAlias.mockRejectedValueOnce(new Error("store is read-only"));
+      await hear("Heroschmeil pm");
+      chooseHerosmile();
+      fireEvent.keyDown(window, { key: "Enter" });
+      expect(mocks.learnAlias).toHaveBeenCalledWith("conn", "customers", 2, "heroschmeil");
+      expect(mocks.emitTo).toHaveBeenCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
+        action: expect.objectContaining({ type: "start", projectId: 21, description: "" }),
+        learned: "„heroschmeil“ = Herosmile",
+      });
+      expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(mocks.loggerError).toHaveBeenCalledWith(
+          "Quick entry window: Error: store is read-only",
+        ),
+      );
+    });
+
+    it("can be finished by typing, and learns from that correction too", async () => {
+      await hear("Heroschmeil pm");
+      fireEvent.keyDown(window, { key: "Tab" });
+      const input = screen.getByRole("combobox") as HTMLInputElement;
+      expect(input.value).toBe("Heroschmeil pm");
+      expect(document.activeElement).toBe(input);
+
+      await waitFor(() => {
+        fireEvent.change(input, { target: { value: "herosmile pm" } });
+        expect(screen.getByRole("option", { selected: true }).textContent).toContain("Herosmile");
+      });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(mocks.learnAlias).toHaveBeenCalledWith("conn", "customers", 2, "heroschmeil");
+      expect(mocks.emitTo).toHaveBeenLastCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
+        action: expect.objectContaining({ type: "start", projectId: 21 }),
+        learned: "„heroschmeil“ = Herosmile",
+      });
+
+      // The next entry is typed from scratch: nothing to learn from.
+      const again = open();
+      expect(again.value).toBe("");
+      await waitFor(() => {
+        fireEvent.change(again, { target: { value: "herosmile pm" } });
+        expect(screen.getByRole("option", { selected: true })).toBeTruthy();
+      });
+      fireEvent.keyDown(again, { key: "Enter" });
+      expect(mocks.learnAlias).toHaveBeenCalledTimes(1);
+      expect(mocks.emitTo).toHaveBeenLastCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
+        action: expect.objectContaining({ type: "start", projectId: 21 }),
+      });
+    });
+
+    it("learns nothing when the edit ends in a command", async () => {
+      await hear("Heroschmeil pm");
+      fireEvent.keyDown(window, { key: "Tab" });
+      const input = screen.getByRole("combobox");
+      fireEvent.change(input, { target: { value: "stopp" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(mocks.emitTo).toHaveBeenLastCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
+        action: { type: "command", command: "stop" },
+      });
+      expect(mocks.learnAlias).not.toHaveBeenCalled();
+    });
+
+    it("starts from the microphone button of the bar when it is switched on", async () => {
+      await renderWindow();
+      open();
+      expect(screen.queryByRole("button", { name: "adversum.voice.speak" })).toBeNull();
+      cleanup();
+
+      mocks.settings = {
+        settings: { ...(mocks.settings.settings as object), voiceEnabled: true },
+      };
+      mocks.startVoice.mockRejectedValue(new Error("no microphone"));
+      await renderWindow();
+      open();
+      fireEvent.click(screen.getByRole("button", { name: "adversum.voice.speak" }));
+      expect(mocks.startVoice).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(mocks.loggerError).toHaveBeenCalledWith("Quick entry window: Error: no microphone"),
+      );
+    });
   });
 
   it("asks for a connection first and survives missing window events", async () => {

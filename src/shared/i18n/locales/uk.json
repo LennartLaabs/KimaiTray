@@ -842,6 +842,7 @@
         "stopped": "■ {{label}} stopped",
         "paused": "⏸ {{label}} paused",
         "resumed": "▶ {{label}} resumed",
+        "noted": "✎ Note added to {{label}}",
         "undone": "Undone",
         "nothing": "Nothing to do",
         "failed": "That did not work"
@@ -875,6 +876,79 @@
     },
     "reminder": {
       "title": "Start right away"
+    },
+    "voice": {
+      "title": "Voice input",
+      "description": "Hold a key, say what you are working on, release: the matching timer starts. Recognition runs entirely on this Mac.",
+      "speak": "Speak instead of typing",
+      "listening": "Listening …",
+      "hintHold": "Release to finish · esc cancels",
+      "hintManual": "↵ or “Done” to finish · esc cancels",
+      "done": "Done",
+      "transcribing": "Working it out …",
+      "addNote": "Add a note to the running timer",
+      "hintAuto": "Starts by itself in a moment · ↵ now · ↑↓ change · esc discard",
+      "hintConfirm": "↵ start · ⌘↵ in between · ⇥ edit by hand · esc discard",
+      "learned": "Learned: {{aliases}}",
+      "openPrivacy": "Open System Settings",
+      "problem": {
+        "empty": "Nothing understood. Please say it again.",
+        "disabled": "Voice input is switched off (Settings → Voice input).",
+        "noModel": "The speech model is still missing (Settings → Voice input).",
+        "permissionDenied": "No access to the microphone.",
+        "permissionRequested": "Please allow microphone access, then speak again.",
+        "noMicrophone": "No microphone found.",
+        "failed": "Speech recognition failed."
+      },
+      "settings": {
+        "unsupported": "Voice input is only available on macOS so far.",
+        "enable": "Enable voice input",
+        "enableDescription": "The selected speech model is downloaded when you first enable this. After that, recognition needs no internet.",
+        "microphone": "Microphone",
+        "permission": {
+          "granted": "Access allowed.",
+          "denied": "Access denied. Allow “KimaiTray Adversum” in System Settings under Privacy & Security → Microphone.",
+          "undetermined": "macOS asks for access the first time."
+        },
+        "requestPermission": "Ask for access",
+        "model": "Speech model",
+        "modelDescription": "Larger models understand more accurately, but need more disk space and a little longer.",
+        "models": {
+          "base": {
+            "name": "Base",
+            "note": "Fastest, for clear speech and short names."
+          },
+          "small": {
+            "name": "Small",
+            "note": "Recommended: good recognition with a short wait."
+          },
+          "large-v3-turbo": {
+            "name": "Large v3 Turbo",
+            "note": "Most accurate, needs the most disk space."
+          }
+        },
+        "installed": "Downloaded",
+        "download": "Download",
+        "downloadLabel": "Download {{name}}",
+        "downloading": "{{percent}} %",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "deleteLabel": "Delete {{name}}",
+        "downloadFailed": "The download failed. Check the internet connection and free disk space, then try again.",
+        "folder": "Model folder",
+        "folderDescription": "Models that are already downloaded are not moved when you change it.",
+        "used": "In use: {{size}}.",
+        "chooseFolder": "Choose folder …",
+        "resetFolder": "Default",
+        "folderRejected": "This folder cannot be used.",
+        "trigger": "Trigger",
+        "shortcut": "Voice key",
+        "shortcutDescription": "Hold it and speak; releasing it finishes.",
+        "shortcutTapDescription": "Press once to start recording, press again to finish.",
+        "tapMode": "Tap instead of hold",
+        "tapModeDescription": "For longer sentences, or when the key combination is awkward to hold.",
+        "privacy": "Recordings are processed on this Mac only and are not stored. Nothing goes to the internet except the one-time download of the speech model."
+      }
     }
   }
 }

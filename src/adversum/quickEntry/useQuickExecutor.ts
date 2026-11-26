@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { KimaiClient } from "../../api/kimaiClient";
 import type { KimaiTimesheetEntry } from "../../api/kimaiTypes";
 import type { PausedTimerData } from "../../api/pauseStore";
-import { deleteTimesheet, getActiveTimesheets } from "../../api/timesheetApi";
+import { deleteTimesheet, getActiveTimesheets, updateTimesheet } from "../../api/timesheetApi";
 import { invalidateTimesheets } from "../../hooks/invalidateTimesheets";
 import { acquireTimerOperation } from "../../hooks/timerOperationLock";
 import type { StartPreview } from "../../hooks/useStartTask";
@@ -72,7 +72,7 @@ interface UndoPlan {
 }
 
 interface QuickExecutor {
-  execute: (action: QuickAction) => Promise<void>;
+  execute: (action: QuickAction, learned?: string) => Promise<void>;
   undo: (toastId: number) => Promise<void>;
   /** The current confirmation, cleared after a few seconds. */
   toast: QuickToastData | null;
@@ -115,12 +115,21 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
   const linkOrigin = useRef<"created" | "loaded">("loaded");
   const { connectionId, timersReady, timers, pausedTimers, busy, resumeTimer } = options;
 
-  const announce = useCallback((kind: QuickToastKind, label = "", plan?: UndoPlan) => {
-    const data: QuickToastData = { id: ++toastId.current, kind, label, undoable: !!plan };
-    pendingUndo.current = plan ? { id: data.id, plan } : null;
-    setToast(data);
-    void emitTo(QUICK_WINDOW_LABEL, QUICK_TOAST_EVENT, data).catch(() => undefined);
-  }, []);
+  const announce = useCallback(
+    (kind: QuickToastKind, label = "", plan?: UndoPlan, detail?: string) => {
+      const data: QuickToastData = {
+        id: ++toastId.current,
+        kind,
+        label,
+        undoable: !!plan,
+        ...(detail ? { detail } : {}),
+      };
+      pendingUndo.current = plan ? { id: data.id, plan } : null;
+      setToast(data);
+      void emitTo(QUICK_WINDOW_LABEL, QUICK_TOAST_EVENT, data).catch(() => undefined);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -214,20 +223,30 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
   );
 
   const execute = useCallback(
-    async (action: QuickAction) => {
+    async (action: QuickAction, learned?: string) => {
       const current = latest.current;
-      const label = action.type === "command" ? "" : action.label;
+      const label = action.type === "start" || action.type === "log" ? action.label : "";
       if (!current.client) return announce("failed", label);
       try {
         if (action.type === "command") return await runCommand(action.command);
+        if (action.type === "note") {
+          const [running] = current.timers;
+          if (!running) return announce("nothing");
+          await updateTimesheet(current.client, running.id, {
+            description: [running.description, action.text].filter(Boolean).join("\n"),
+          });
+          await invalidateTimesheets(qc);
+          return announce("noted", timerLabel(running));
+        }
         if (action.type === "log") {
           const created = await createFinishedEntry(current.client, action);
           await invalidateTimesheets(qc);
-          return announce("logged", label, {
-            deleteId: created.id,
-            reopenIds: [],
-            discardPausedId: null,
-          });
+          return announce(
+            "logged",
+            label,
+            { deleteId: created.id, reopenIds: [], discardPausedId: null },
+            learned,
+          );
         }
 
         const stopped = current.timers.map((timer) => timer.id);
@@ -258,11 +277,16 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
         );
         if (!entry) return announce("failed", label);
         if (interrupted) storeLink({ timesheetId: entry.id, pausedId: interrupted.pausedId });
-        announce("started", label, {
-          deleteId: entry.id,
-          reopenIds: interrupted ? [interrupted.timesheetId] : stopped,
-          discardPausedId: interrupted?.pausedId ?? null,
-        });
+        announce(
+          "started",
+          label,
+          {
+            deleteId: entry.id,
+            reopenIds: interrupted ? [interrupted.timesheetId] : stopped,
+            discardPausedId: interrupted?.pausedId ?? null,
+          },
+          learned,
+        );
       } catch (error) {
         logger.error(`Quick action failed: ${String(error)}`);
         announce("failed", label);
@@ -310,7 +334,7 @@ export function useQuickExecutor(options: QuickExecutorOptions): QuickExecutor {
     const currentWindow = getCurrentWindow();
     const listeners = [
       currentWindow.listen<QuickExecuteRequest>(QUICK_EXECUTE_EVENT, ({ payload }) => {
-        void execute(payload.action);
+        void execute(payload.action, payload.learned);
       }),
       currentWindow.listen<QuickUndoRequest>(QUICK_UNDO_EVENT, ({ payload }) => {
         void undo(payload.id);

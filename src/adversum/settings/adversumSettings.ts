@@ -11,6 +11,10 @@ export type CustomerIndicator = "logo" | "dots";
 
 export type AliasKind = "customers" | "projects" | "activities";
 
+/** Whisper models voice input can use, smallest first. */
+export const VOICE_MODELS = ["base", "small", "large-v3-turbo"] as const;
+export type VoiceModel = (typeof VOICE_MODELS)[number];
+
 /** Alias words per Kimai entity id, e.g. `{ projects: { "12": ["pm"] } }`. */
 export type ConnectionAliases = Record<AliasKind, Record<string, string[]>>;
 
@@ -22,6 +26,14 @@ export interface AdversumSettings {
   shortcutPreviousTask: string;
   /** Quick-entry aliases, keyed by connection id. */
   aliases: Record<string, ConnectionAliases>;
+  /** Voice input is switched on (the speech model may still be missing). */
+  voiceEnabled: boolean;
+  voiceModel: VoiceModel;
+  /** Folder for speech models; empty means the app data folder. */
+  voiceModelDir: string;
+  /** Press once to start and once to stop, instead of holding the key. */
+  voiceTapMode: boolean;
+  shortcutVoice: string;
 }
 
 export const ADVERSUM_SETTINGS_EVENT = "adversum://settings-changed";
@@ -32,6 +44,11 @@ export const defaultAdversumSettings: AdversumSettings = {
   shortcutQuickEntry: "Control+Alt+Space",
   shortcutPreviousTask: "Control+Alt+Z",
   aliases: {},
+  voiceEnabled: false,
+  voiceModel: "small",
+  voiceModelDir: "",
+  voiceTapMode: false,
+  shortcutVoice: "Control+Alt+V",
 };
 
 const ALIAS_KINDS: readonly AliasKind[] = ["customers", "projects", "activities"];
@@ -108,6 +125,11 @@ export function normalizeAdversumSettings(raw: unknown): AdversumSettings {
       256,
     ),
     aliases: normalizeAliases(value.aliases),
+    voiceEnabled: value.voiceEnabled === true,
+    voiceModel: VOICE_MODELS.find((model) => model === value.voiceModel) ?? "small",
+    voiceModelDir: stringValue(value.voiceModelDir, "", 1024),
+    voiceTapMode: value.voiceTapMode === true,
+    shortcutVoice: stringValue(value.shortcutVoice, defaultAdversumSettings.shortcutVoice, 256),
   };
 }
 

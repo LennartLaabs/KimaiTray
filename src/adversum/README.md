@@ -34,6 +34,9 @@ marked `ADVERSUM:`. See the repository `CLAUDE.md` for the fork rules.
 | `quickEntry/QuickEntryWindow.tsx` | Window component for the label `adversum-quick`. | `main.tsx` (window routing), `tauri.conf.json` (window), `capabilities/adversum-quick.json` |
 | `quickEntry/AdversumPopupQuick.tsx`, `useQuickExecutor.ts`, `popupBridge.ts` | The fork's layer in the tray popup: bar, executor for quick actions from every window, toast, "start in between". | `windows/TrayPopup.tsx` (one component, typing redirect), context menus in `components/FavoriteTaskItem.tsx` and `RecentTaskItem.tsx` |
 | `quickEntry/ReminderSuggestions.tsx` | Three one-click starts on the "no timer" reminder. | `windows/TimerReminder.tsx` |
+| `voice/spoken.ts`, `spokenTime.ts`, `spokenNumbers.ts` | Pure functions that turn a transcribed sentence into a command, a note or text for the quick entry parser. | none (`quickEntry/parse.ts` has a spoken mode for it) |
+| `voice/VoiceStage.tsx`, `learn.ts`, `vocabulary.ts`, `voiceApi.ts` | Recording overlay and confirmation card in the quick entry window, learning aliases from corrections, the vocabulary for the speech model, and the bridge to the native side. | none (rendered by `quickEntry/QuickEntryWindow.tsx`; microphone button in `QuickEntryBar.tsx`) |
+| `settings/VoiceSection.tsx` | Settings page "Voice input". | `types.ts` (`SettingsSection`) |
 | Rust only: `src-tauri/src/adversum/keystore.rs` | API token access through the signed key helper (`scripts/adversum/keyhelper/`), so macOS does not ask for the keychain after every build. Why and how: repository `CLAUDE.md`, "Code signing and the keychain". | `src-tauri/src/keychain.rs` (three functions try the helper first; own keychain service, separate one for debug builds) |
 
 ## Customer logos
@@ -119,3 +122,31 @@ Windows may only `emitTo` a named window (`core:event:allow-emit-to`); plain `em
 - `quick_panel.rs` (macOS): hosts the webview in a non-activating `NSPanel`, mirroring upstream's `tray/platform/macos_panel.rs`, and places the panel itself in Cocoa screen points (`NSEvent.mouseLocation`, `NSScreen.visibleFrame`). Do not size or move it through the Tauri window: `set_size` keeps the bottom edge fixed, which pushes a growing bar up and off the screen, and `set_position` converts with a single scale factor, which is wrong between monitors of different density.
 - `shortcuts.rs`: registers the two fork shortcuts from the fork settings. Upstream's `register_handlers` calls `unregister_all`, so it ends with a hook that registers ours again. A shortcut the system refuses is not saved (`adversum_patch_settings` registers before it persists).
 - Dev check without pressing a shortcut (debug builds only): `ADVERSUM_SHOW_QUICK=1 npm run tauri dev` opens the bar at launch and resizes it once, `ADVERSUM_SHOW_QUICK=toast …` shows the toast. The log lines "Quick entry panel placed" give the frame and the visible screen area in points. Tell Lennart before starting a dev instance and quit it afterwards (repository `CLAUDE.md`, "Only the installed app runs"); add `-- --config '{"identifier":"io.adversum.kimaitray.devcheck"}'`, because a second instance with the same identifier exits at once.
+
+## Voice input
+
+Hold the voice key (default ⌃⌥V), say what you are working on, release. Everything runs on this Mac; macOS only for now.
+
+### From key press to timer
+
+1. **Native side** (`src-tauri/src/adversum/voice/`). `shortcuts.rs` acts on both edges of the voice key: pressed starts `session::begin`, released `session::finish` (in tap mode a second press finishes). `recorder.rs` records the default microphone with cpal on its own thread, `audio.rs` mixes to mono and resamples to 16 kHz, `transcribe.rs` runs whisper.cpp through whisper-rs: German, primed with the vocabulary, Metal on Apple Silicon and CPU on Intel. The model stays loaded for ten minutes after the last use. `tauri-plugin-stt` was checked first; it has no initial prompt, which is why whisper-rs is used directly.
+2. **Quick entry window.** The native side shows it in the bar's place and sends `adversum://voice-state` (`recording`, `transcribing`, `result`, `empty`, `error`), `adversum://voice-level` and, on Apple Silicon, `adversum://voice-partial` with the text so far. `voice/VoiceStage.tsx` renders the overlay and then the confirmation card.
+3. **Reading the sentence** (`voice/spoken.ts`). Removes fillers and lead-ins ("äh", "ich mache jetzt", "starte bitte"), rewrites spoken times for `quickEntry/timeParser.ts` ("seit zehn Uhr dreißig" → "seit 10:30", "zwischen acht und neun" → "von 8 bis 9", "seit einer halben Stunde" → "vor 30 min", "von 14 Uhr bis jetzt"), and recognizes commands ("Stopp", "mach mal Pause", "zurück zur letzten Aufgabe") and notes ("Notiz: …" is added to the running timer). A verb gives the note a noun and hints at the activity: "mit Gigi telefoniert" → note "Telefonat Gigi", activity hints "telefon", "call", "austausch" ….
+4. **Matching** (`parseQuickEntry(…, spoken)`). The spoken mode differs from typed input in three ways. Word order is free: entities can be named anywhere, the words in between are the note; after the first note word a later word must name an entity almost exactly. Glue words ("für", "mit", "das") neither start the note nor end a name. And there are two more kinds of evidence: words of *past notes* point to the task they were booked on (`QuickHistory.notes`, so "Gigi" finds DUSW · Austausch), and the verb's activity hints count when no word names the activity.
+5. **Confirmation card.** A confident reading (the parser's `autoSelect`, and no time in the future) starts by itself after two seconds, shown by a shrinking bar. Enter starts at once, ↑/↓ pick another suggestion, Tab continues by typing in the bar, Escape discards. Any key stops the countdown. An uncertain reading waits with the first row preselected.
+6. **Learning** (`voice/learn.ts`). Taking another suggestion than the first, or correcting the text by hand, teaches aliases: the word that named the wrong entity, a leftover word that resembles the right name, or (customer only) the only leftover word. They are stored with `adversum_learn_alias`, the one settings write the quick windows are allowed, and named in the confirmation toast ("Gemerkt: …"). Wrong ones can be removed under Settings → Schnellstart → Aliasse.
+
+### Speech models
+
+`voice/models.rs`: `base` (148 MB), `small` (488 MB, default) and `large-v3-turbo` (1.6 GB), the `ggml` files of the whisper.cpp repository on Hugging Face. Size and SHA-256 are pinned in the code; a download that matches neither is discarded. Models go to `<app data>/adversum/models` or the folder chosen in the settings (`voiceModelDir`); changing the folder does not move files. This download is the only network access of the feature.
+
+### Vocabulary
+
+The tray window keeps the native side's vocabulary current (`voice/vocabulary.ts`, `adversum_voice_set_vocabulary`): project, activity and customer names and all aliases. Whisper reads only the last part of an overlong prompt, so customers come last and the native side cuts from the front.
+
+### Permissions and build
+
+- `src-tauri/Info.plist` has `NSMicrophoneUsageDescription`, and `src-tauri/Entitlements.plist` the audio-input entitlement the hardened runtime requires. macOS ties the permission to the signature, hence the fixed certificate (repository `CLAUDE.md`).
+- Building needs `cmake` (whisper.cpp is compiled from source by `whisper-rs-sys`) and the Xcode command line tools.
+- A real transcription can be tested without the app: see the ignored test in `voice/transcribe.rs`.
+- The browser preview simulates recording and transcription (`scripts/adversum/preview/README.md`).

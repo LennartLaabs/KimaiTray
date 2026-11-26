@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
   deleteTimesheet: vi.fn(),
   getActiveTimesheets: vi.fn(),
+  updateTimesheet: vi.fn(),
   createFinishedEntry: vi.fn(),
   reopenTimesheet: vi.fn(),
   invalidateTimesheets: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("../../api/timesheetApi", () => ({
   deleteTimesheet: mocks.deleteTimesheet,
   getActiveTimesheets: mocks.getActiveTimesheets,
+  updateTimesheet: mocks.updateTimesheet,
 }));
 vi.mock("./quickApi", () => ({
   createFinishedEntry: mocks.createFinishedEntry,
@@ -107,6 +109,7 @@ beforeEach(() => {
   mocks.invalidateTimesheets.mockResolvedValue(undefined);
   mocks.deleteTimesheet.mockResolvedValue(undefined);
   mocks.getActiveTimesheets.mockResolvedValue([]);
+  mocks.updateTimesheet.mockResolvedValue({});
   mocks.reopenTimesheet.mockResolvedValue({});
   options = {
     client,
@@ -236,6 +239,55 @@ describe("undo", () => {
     await act(() => result.current.undo(1));
     expect(mocks.deleteTimesheet).toHaveBeenCalledWith(client, 321);
     expect(mocks.getActiveTimesheets).not.toHaveBeenCalled();
+  });
+});
+
+describe("what voice input adds", () => {
+  it("shows what was learned with the confirmation of a start or a logged entry", async () => {
+    mocks.createFinishedEntry.mockResolvedValue({ id: 321 });
+    const { result } = setup();
+    await act(() => result.current.execute(startAction, "„kaka“ = K&K"));
+    expect(result.current.toast).toEqual({
+      id: 1, kind: "started", label: "Herosmile · Austausch", undoable: true, detail: "„kaka“ = K&K",
+    });
+    const log: QuickAction = {
+      type: "log", projectId: 21, activityId: 2, description: "", label: "Herosmile · Austausch",
+      begin: "2026-11-26T09:00:00", end: "2026-11-26T10:00:00",
+    };
+    await act(() => result.current.execute(log, "„kaka“ = K&K"));
+    expect(result.current.toast).toMatchObject({ kind: "logged", detail: "„kaka“ = K&K" });
+  });
+
+  it("adds a line to the note of the running timer", async () => {
+    const running = { ...timer(7), description: "Gigi Call" };
+    const { result, rerender } = setup({ timers: [running] });
+    await act(() => result.current.execute({ type: "note", text: "Angebot nachfassen" }));
+    expect(mocks.updateTimesheet).toHaveBeenCalledWith(client, 7, {
+      description: "Gigi Call\nAngebot nachfassen",
+    });
+    expect(mocks.invalidateTimesheets).toHaveBeenCalled();
+    expect(result.current.toast).toEqual({
+      id: 1, kind: "noted", label: "Marketing Retainer · Projektmanagement", undoable: false,
+    });
+
+    // A timer without a note gets the text as its note.
+    options = { ...options, timers: [timer(8)] };
+    rerender(options);
+    await act(() => result.current.execute({ type: "note", text: "Erster Eintrag" }));
+    expect(mocks.updateTimesheet).toHaveBeenLastCalledWith(client, 8, { description: "Erster Eintrag" });
+  });
+
+  it("says so when no timer runs, and reports a failing update", async () => {
+    const { result, rerender } = setup();
+    await act(() => result.current.execute({ type: "note", text: "Angebot" }));
+    expect(result.current.toast).toMatchObject({ kind: "nothing", label: "" });
+    expect(mocks.updateTimesheet).not.toHaveBeenCalled();
+
+    mocks.updateTimesheet.mockRejectedValue(new Error("403"));
+    options = { ...options, timers: [timer(7)] };
+    rerender(options);
+    await act(() => result.current.execute({ type: "note", text: "Angebot" }));
+    expect(result.current.toast).toMatchObject({ kind: "failed", label: "" });
   });
 });
 
@@ -414,8 +466,11 @@ describe("requests from other windows and shortcuts", () => {
     const { result, unmount } = setup({ recentTasks: [recent] });
     await waitFor(() => expect(Object.keys(handlers)).toHaveLength(4));
 
-    await act(async () => handlers[QUICK_EXECUTE_EVENT]!({ payload: { action: startAction } }));
+    await act(async () =>
+      handlers[QUICK_EXECUTE_EVENT]!({ payload: { action: startAction, learned: "„pm“ = PM" } }),
+    );
     await waitFor(() => expect(result.current.toast?.kind).toBe("started"));
+    expect(result.current.toast?.detail).toBe("„pm“ = PM");
 
     await act(async () => handlers[QUICK_UNDO_EVENT]!({ payload: { id: result.current.toast!.id } }));
     await waitFor(() => expect(result.current.toast?.kind).toBe("undone"));

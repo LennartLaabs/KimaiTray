@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { emitTo } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -7,7 +7,11 @@ import { useLanguageSync } from "../../hooks/useLanguageSync";
 import { currentPlatform } from "../../platform";
 import { logger } from "../../utils/logger";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
+import { aliasesToLearn, type LearnedAlias } from "../voice/learn";
+import { learnAlias, startVoice, VOICE_STATE_EVENT, type VoiceState } from "../voice/voiceApi";
+import VoiceStage, { type VoiceOrigin } from "../voice/VoiceStage";
 import type { QuickAction } from "./actions";
+import { combinationKey } from "./catalog";
 import { hideQuickWindow, resizeQuickWindow, showQuickToast } from "./quickApi";
 import QuickEntryBar from "./QuickEntryBar";
 import {
@@ -29,7 +33,9 @@ type Stage =
   /** The bar is open and has the keyboard. */
   | { name: "input" }
   /** The confirmation of the last quick action, at the bottom of the screen. */
-  | { name: "toast"; toast: QuickToastData };
+  | { name: "toast"; toast: QuickToastData }
+  /** Voice input: recording, transcribing, then the confirmation card. */
+  | { name: "voice"; state: VoiceState };
 
 function report(error: unknown): void {
   logger.error(`Quick entry window: ${String(error)}`);
@@ -44,6 +50,9 @@ function report(error: unknown): void {
  * - the **confirmation toast** for any quick action, whichever window or
  *   shortcut started it. It appears at the bottom center of the screen for a
  *   few seconds without taking the keyboard.
+ * - **voice input** in the bar's place: the native side records and
+ *   transcribes, this window shows the progress and then asks for
+ *   confirmation of what it understood.
  */
 export default function QuickEntryWindow() {
   const { t } = useTranslation();
@@ -57,7 +66,9 @@ export default function QuickEntryWindow() {
     settings.aliases[activeConnectionId],
   );
   const [stage, setStage] = useState<Stage>({ name: "idle" });
-  const [focusRequest, setFocusRequest] = useState(0);
+  const [focus, setFocus] = useState({ request: 0, text: "" });
+  /** Set while the bar holds a voice input the user is correcting by hand. */
+  const voiceOrigin = useRef<VoiceOrigin | null>(null);
   const stageRef = useRef(stage);
   stageRef.current = stage;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -66,16 +77,23 @@ export default function QuickEntryWindow() {
     const currentWindow = getCurrentWindow();
     const listeners = [
       currentWindow.listen(QUICK_SHOWN_EVENT, () => {
+        voiceOrigin.current = null;
         setStage({ name: "input" });
-        setFocusRequest((request) => request + 1);
+        setFocus((current) => ({ request: current.request + 1, text: "" }));
       }),
       currentWindow.listen<QuickToastData>(QUICK_TOAST_EVENT, ({ payload }) => {
-        // An open bar is not replaced; the user is typing the next entry.
-        if (stageRef.current.name !== "input") setStage({ name: "toast", toast: payload });
+        // An open bar or voice input is not replaced; the user is busy there.
+        const { name } = stageRef.current;
+        if (name !== "input" && name !== "voice") setStage({ name: "toast", toast: payload });
+      }),
+      currentWindow.listen<VoiceState>(VOICE_STATE_EVENT, ({ payload }) => {
+        setStage({ name: "voice", state: payload });
       }),
       currentWindow.onFocusChanged(({ payload: hasFocus }) => {
-        // Clicking elsewhere closes the bar. The toast never has the focus.
-        if (!hasFocus && stageRef.current.name === "input") {
+        // Clicking elsewhere closes the bar and voice input (hiding the
+        // window also ends a recording). The toast never has the focus.
+        const { name } = stageRef.current;
+        if (!hasFocus && (name === "input" || name === "voice")) {
           setStage({ name: "idle" });
           void hideQuickWindow().catch(report);
         }
@@ -114,16 +132,45 @@ export default function QuickEntryWindow() {
     return () => observer.disconnect();
   }, []);
 
-  const close = () => {
+  const close = useCallback(() => {
+    voiceOrigin.current = null;
     setStage({ name: "idle" });
     void hideQuickWindow().catch(report);
+  }, []);
+
+  const send = (action: QuickAction, learned: readonly LearnedAlias[] = []) => {
+    // The window closes right away; the outcome comes back as a toast.
+    close();
+    for (const { kind, entityId, alias } of learned) {
+      void learnAlias(activeConnectionId, kind, entityId, alias).catch(report);
+    }
+    const summary = learned.map(({ alias, name }) => `„${alias}“ = ${name}`).join(", ");
+    void emitTo(TRAY_WINDOW_LABEL, QUICK_EXECUTE_EVENT, {
+      action,
+      ...(summary ? { learned: summary } : {}),
+    }).catch(report);
   };
 
-  const send = (action: QuickAction) => {
-    // The bar closes right away; the outcome comes back as a toast.
-    close();
-    void emitTo(TRAY_WINDOW_LABEL, QUICK_EXECUTE_EVENT, { action }).catch(report);
+  /** An action from the bar; after voice input, what the edit corrected is learned. */
+  const sendTyped = (action: QuickAction) => {
+    const origin = voiceOrigin.current;
+    const chosen =
+      origin && (action.type === "start" || action.type === "log")
+        ? catalog.combinations.find(
+            (item) => item.key === combinationKey(action.projectId, action.activityId),
+          )
+        : undefined;
+    send(
+      action,
+      origin && chosen ? aliasesToLearn({ ...origin, chosen, catalog }) : [],
+    );
   };
+
+  const edit = useCallback((text: string, origin: VoiceOrigin) => {
+    voiceOrigin.current = origin;
+    setStage({ name: "input" });
+    setFocus((current) => ({ request: current.request + 1, text }));
+  }, []);
 
   return (
     <div ref={rootRef} data-quick-stage={stage.name}>
@@ -144,14 +191,27 @@ export default function QuickEntryWindow() {
               <p className="px-4 py-3.5 text-[15px] text-gray-500 dark:text-gray-400">
                 {t("adversum.quick.notConnected")}
               </p>
+            ) : stage.name === "voice" ? (
+              <VoiceStage
+                state={stage.state}
+                catalog={catalog}
+                history={history}
+                onAction={send}
+                onEdit={edit}
+                onClose={close}
+              />
             ) : (
               <QuickEntryBar
                 variant="window"
                 catalog={catalog}
                 history={history}
-                focusRequest={focusRequest}
-                onAction={send}
+                focusRequest={focus.request}
+                seedText={focus.text}
+                onAction={sendTyped}
                 onClose={close}
+                onVoice={
+                  settings.voiceEnabled ? () => void startVoice().catch(report) : undefined
+                }
               />
             )}
           </div>

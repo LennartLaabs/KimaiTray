@@ -125,6 +125,98 @@ function setManualLogo(customerId: number, dataUrl: string | null): Args {
   return entry;
 }
 
+// ── Voice input ────────────────────────────────────────────────
+// No microphone and no speech model here: "recording" plays a level curve
+// and "transcribing" returns a sample sentence (`?say=…` picks your own).
+const VOICE_MODELS = [
+  { id: "base", sizeBytes: 147_951_465 },
+  { id: "small", sizeBytes: 487_601_967 },
+  { id: "large-v3-turbo", sizeBytes: 1_624_555_275 },
+];
+const VOICE_SAMPLES = [
+  "DUSW Projektmanagement, Gigi Call seit zehn Uhr.",
+  "Ich hab von 10 bis 11 mit Herosmile telefoniert.",
+  "Schnaider Design",
+  "Notiz: Angebot nachfassen.",
+  "Stopp.",
+  "Irgendwas mit Zetteln",
+];
+const VOICE_QUICK = "adversum-quick";
+let voiceSample = 0;
+let voiceRecording: ReturnType<typeof setInterval> | null = null;
+let voiceDownload: { model: string; received: number; total: number; timer: ReturnType<typeof setInterval> } | null = null;
+
+function voiceStore(): Args {
+  return { installed: [], permission: "undetermined", ...readStore().voice };
+}
+
+function patchVoiceStore(values: Args): void {
+  const store = readStore();
+  store.voice = { ...voiceStore(), ...values };
+  writeStore(store);
+}
+
+function voiceState(phase: string, extra: Args = {}): void {
+  emit("adversum://voice-state", { phase, manual: true, ...extra }, VOICE_QUICK);
+}
+
+function stopVoiceRecording(): boolean {
+  if (!voiceRecording) return false;
+  clearInterval(voiceRecording);
+  voiceRecording = null;
+  return true;
+}
+
+function startVoiceRecording(): void {
+  const voice = voiceStore();
+  const settings = readStore().adversum ?? {};
+  if (!settings.voiceEnabled) return voiceState("error", { reason: "disabled" });
+  if (!voice.installed.includes(settings.voiceModel ?? "small")) {
+    return voiceState("error", { reason: "noModel" });
+  }
+  if (voice.permission !== "granted") {
+    patchVoiceStore({ permission: "granted" });
+    return voiceState("error", { reason: "permissionRequested" });
+  }
+  stopVoiceRecording();
+  voiceState("recording");
+  const sentence = params.get("say") ?? VOICE_SAMPLES[voiceSample % VOICE_SAMPLES.length]!;
+  const words = sentence.split(" ");
+  let tick = 0;
+  voiceRecording = setInterval(() => {
+    tick += 1;
+    emit("adversum://voice-level", 0.35 + 0.3 * Math.sin(tick / 2) + 0.2 * Math.random(), VOICE_QUICK);
+    if (tick % 8 === 0) {
+      emit("adversum://voice-partial", words.slice(0, tick / 8).join(" "), VOICE_QUICK);
+    }
+  }, 60);
+}
+
+function finishVoiceRecording(): void {
+  if (!stopVoiceRecording()) return;
+  voiceState("transcribing");
+  const text = params.get("say") ?? VOICE_SAMPLES[voiceSample++ % VOICE_SAMPLES.length]!;
+  setTimeout(() => voiceState("result", { text }), 700);
+}
+
+function startVoiceDownload(model: string): void {
+  const total = VOICE_MODELS.find((item) => item.id === model)?.sizeBytes ?? 0;
+  if (voiceDownload || total === 0) return;
+  const announce = (state: string, received: number) =>
+    emit("adversum://voice-download", { model, state, received, total });
+  const timer = setInterval(() => {
+    const download = voiceDownload!;
+    download.received = Math.min(total, download.received + total / 40);
+    if (download.received < total) return announce("progress", download.received);
+    clearInterval(timer);
+    voiceDownload = null;
+    patchVoiceStore({ installed: [...new Set([...voiceStore().installed, model])] });
+    announce("done", total);
+  }, 100);
+  voiceDownload = { model, received: 0, total, timer };
+  announce("progress", 0);
+}
+
 // ── Commands ───────────────────────────────────────────────────
 function matches(item: Args, identity: Args): boolean {
   return Object.entries(identity).every(([key, value]) => item[key] === value);
@@ -234,6 +326,56 @@ const commands: Record<string, (args: Args) => unknown> = {
   adversum_logo_set_manual: ({ request }) =>
     setManualLogo(request.customerId, `data:image/png;base64,${request.imageBase64}`),
   adversum_logo_clear_manual: ({ request }) => setManualLogo(request.customerId, null),
+  adversum_voice_status: () => {
+    const voice = voiceStore();
+    const custom = readStore().adversum?.voiceModelDir;
+    const defaultModelDir = "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/models";
+    return {
+      supported: true,
+      permission: voice.permission,
+      liveText: true,
+      models: VOICE_MODELS.map((model) => ({ ...model, installed: voice.installed.includes(model.id) })),
+      modelDir: custom || defaultModelDir,
+      defaultModelDir,
+      download: voiceDownload
+        ? { model: voiceDownload.model, state: "progress", received: voiceDownload.received, total: voiceDownload.total }
+        : null,
+    };
+  },
+  adversum_voice_download: ({ model }) => startVoiceDownload(model),
+  adversum_voice_cancel_download: () => {
+    if (!voiceDownload) return;
+    clearInterval(voiceDownload.timer);
+    const { model, total } = voiceDownload;
+    voiceDownload = null;
+    emit("adversum://voice-download", { model, state: "cancelled", received: 0, total });
+  },
+  adversum_voice_delete_model: ({ model }) =>
+    patchVoiceStore({ installed: voiceStore().installed.filter((id: string) => id !== model) }),
+  adversum_voice_choose_dir: () => "/Volumes/Extern/Sprachmodelle",
+  adversum_voice_request_permission: () => {
+    patchVoiceStore({ permission: "granted" });
+    emit("adversum://voice-permission", true);
+    return "granted";
+  },
+  adversum_voice_open_privacy: () => console.debug("[fake tauri] privacy settings opened"),
+  adversum_voice_start: () => startVoiceRecording(),
+  adversum_voice_finish: () => finishVoiceRecording(),
+  adversum_voice_cancel: () => void stopVoiceRecording(),
+  adversum_voice_set_vocabulary: ({ vocabulary }) =>
+    console.debug(`[fake tauri] speech vocabulary: ${vocabulary}`),
+  adversum_learn_alias: ({ connectionId, kind, entityId, alias }) => {
+    const store = readStore();
+    const aliases = store.adversum.aliases ?? {};
+    const connection = aliases[connectionId] ?? { customers: {}, projects: {}, activities: {} };
+    const list: string[] = connection[kind][String(entityId)] ?? [];
+    if (list.includes(alias)) return false;
+    connection[kind][String(entityId)] = [...list, alias];
+    store.adversum = { ...store.adversum, aliases: { ...aliases, [connectionId]: connection } };
+    writeStore(store);
+    emit("adversum://settings-changed", store.adversum);
+    return true;
+  },
 };
 
 Object.assign(window, {

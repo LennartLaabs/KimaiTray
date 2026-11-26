@@ -22,12 +22,22 @@ export default function QuickToast({ toast, onUndo, undoKey }: QuickToastProps) 
       data-quick-toast={toast.kind}
       className="flex items-center gap-3 px-4 py-3"
     >
-      <span
-        className={`line-clamp-2 min-w-0 flex-1 text-[14px] ${
-          failed ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"
-        }`}
-      >
-        {t(`adversum.quick.toast.${toast.kind}`, { label: toast.label })}
+      <span className="min-w-0 flex-1">
+        <span
+          className={`line-clamp-2 text-[14px] ${
+            failed ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"
+          }`}
+        >
+          {t(`adversum.quick.toast.${toast.kind}`, { label: toast.label })}
+        </span>
+        {toast.detail && (
+          <span
+            data-toast-detail
+            className="mt-0.5 block truncate text-[12px] text-gray-500 dark:text-gray-400"
+          >
+            {t("adversum.voice.learned", { aliases: toast.detail })}
+          </span>
+        )}
       </span>
       {toast.undoable && (
         <button
