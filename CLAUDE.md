@@ -53,6 +53,16 @@ All through `./scripts/adversum/env.sh …` (or after sourcing it):
 
 Build output: `src-tauri/target/release/bundle/dmg/` and `…/bundle/macos/`.
 
+### Browser preview (look at the UI without the native app)
+
+`scripts/adversum/preview/` runs the real frontend in a normal browser against a simulated Tauri backend and sample Kimai data (customers, projects, 90 days of history). Use it to check layout and flows visually; it needs no Kimai instance and no credentials.
+
+```sh
+./scripts/adversum/env.sh npm run dev
+```
+
+Then open `http://localhost:1420/scripts/adversum/preview/index.html`. Query parameters: `window=tray-popup|settings|timer-reminder|adversum-quick`, `theme=dark`, `layout=…`, `indicator=dots`, `reset=1`. Details and limits: `scripts/adversum/preview/README.md`. When a new native command is added, give it a handler in `fakeTauri.ts`; unhandled commands are logged to the browser console.
+
 ### Things that bite
 
 - **Coverage thresholds are 100 % statements/lines/functions and 90 % branches** (`vitest.config.ts`). Every new TypeScript line needs a test. Upstream wraps code that can only run from native menus in `/* v8 ignore start */ … /* v8 ignore stop */`; use that sparingly and only for the same reason.
