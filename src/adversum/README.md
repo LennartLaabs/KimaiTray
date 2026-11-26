@@ -34,6 +34,7 @@ marked `ADVERSUM:`. See the repository `CLAUDE.md` for the fork rules.
 | `quickEntry/QuickEntryWindow.tsx` | Window component for the label `adversum-quick`. | `main.tsx` (window routing), `tauri.conf.json` (window), `capabilities/adversum-quick.json` |
 | `quickEntry/AdversumPopupQuick.tsx`, `useQuickExecutor.ts`, `popupBridge.ts` | The fork's layer in the tray popup: bar, executor for quick actions from every window, toast, "start in between". | `windows/TrayPopup.tsx` (one component, typing redirect), context menus in `components/FavoriteTaskItem.tsx` and `RecentTaskItem.tsx` |
 | `quickEntry/ReminderSuggestions.tsx` | Three one-click starts on the "no timer" reminder. | `windows/TimerReminder.tsx` |
+| Rust only: `src-tauri/src/adversum/keystore.rs` | API token access through the signed key helper (`scripts/adversum/keyhelper/`), so macOS does not ask for the keychain after every build. Why and how: repository `CLAUDE.md`, "Code signing and the keychain". | `src-tauri/src/keychain.rs` (three functions try the helper first; own keychain service, separate one for debug builds) |
 
 ## Customer logos
 
