@@ -14,6 +14,19 @@ const mocks = vi.hoisted(() => ({
   getCustomers: vi.fn(),
   getProjects: vi.fn(),
   getActivities: vi.fn(),
+  listen: vi.fn(),
+}));
+vi.mock("./ProfileEditor", () => ({
+  default: (props: { entity: { id: number }; onSaved: () => void }) => (
+    <div data-profile-editor={props.entity.id}>
+      <button type="button" onClick={props.onSaved}>
+        save-profile
+      </button>
+    </div>
+  ),
+}));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ listen: mocks.listen }),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -81,7 +94,12 @@ beforeEach(() => {
     { id: 1, name: "Projektmanagement", project: null },
     { id: 6, name: "Reporting", project: 11 },
   ]);
+  mocks.listen.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
+    windowHandlers[event] = handler;
+    return vi.fn();
+  });
 });
+let windowHandlers: Record<string, (event: { payload: unknown }) => void> = {};
 afterEach(cleanup);
 
 describe("accelerators", () => {
@@ -173,6 +191,42 @@ describe("QuickEntrySection", () => {
     return screen.getByLabelText(`adversum.quickSettings.aliasesFor:${name}`) as HTMLInputElement;
   }
 
+  it("shows each profile at a glance and opens its form, also when the popup asks for it", async () => {
+    mocks.getCustomers.mockResolvedValue([
+      { id: 2, name: "Herosmile", comment: null },
+      { id: 1, name: "DUSW Unternehmensgruppe", comment: "Kontakte: Giuseppe (Gigi)\nThemen: Roll-Ups" },
+    ]);
+    await renderSection();
+    expect(document.querySelector("[data-profile-summary]")!.textContent).toBe(
+      "Kontakte: Giuseppe (Gigi) · Themen: Roll-Ups",
+    );
+    expect(document.querySelectorAll("[data-profile-summary]")).toHaveLength(1);
+
+    const open = screen.getByRole("button", { name: "adversum.profile.openFor:Herosmile" });
+    fireEvent.click(open);
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector("[data-profile-editor='2']")).not.toBeNull();
+    // Saved: the list is read again from Kimai.
+    const calls = mocks.getCustomers.mock.calls.length;
+    fireEvent.click(screen.getByText("save-profile"));
+    await waitFor(() => expect(mocks.getCustomers.mock.calls.length).toBe(calls + 1));
+    fireEvent.click(open);
+    expect(document.querySelector("[data-profile-editor]")).toBeNull();
+
+    // "Neuer Kunde … einrichten?" in the popup: customers, no filter, that one open.
+    fireEvent.click(screen.getByText("adversum.quickSettings.aliasKind.projects"));
+    act(() => windowHandlers["adversum://profile-setup"]!({ payload: { customerId: 1 } }));
+    await waitFor(() => expect(document.querySelector("[data-profile-editor='1']")).not.toBeNull());
+  });
+
+  it("survives a window without events", async () => {
+    mocks.listen.mockRejectedValue(new Error("no events"));
+    const { unmount } = render(<QuickEntrySection />, { wrapper });
+    await waitFor(() => expect(screen.getByText("DUSW Unternehmensgruppe")).toBeTruthy());
+    unmount();
+    await act(async () => undefined);
+  });
+
   it("keeps the list of team members", async () => {
     await renderSection();
     const field = screen.getByLabelText("adversum.quickSettings.team") as HTMLInputElement;
@@ -258,9 +312,9 @@ describe("QuickEntrySection", () => {
     // Same project name for two customers: the customer tells them apart.
     const contexts = rows.map((row) => row.closest("[data-settings-item]")!.textContent);
     expect(contexts).toEqual([
-      "Marketing RetainerDUSW Unternehmensgruppe",
-      "Marketing RetainerHerosmile",
-      "Orphan",
+      "Marketing RetainerDUSW Unternehmensgruppeadversum.profile.open",
+      "Marketing RetainerHerosmileadversum.profile.open",
+      "Orphanadversum.profile.open",
     ]);
 
     fireEvent.change(screen.getByPlaceholderText("adversum.quickSettings.aliasFilter"), {

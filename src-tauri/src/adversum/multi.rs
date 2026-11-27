@@ -241,6 +241,45 @@ pub async fn adversum_multi_extract(
     .map_err(|error| error.to_string())
 }
 
+/// Asks Claude Code to sort what a sentence says about a customer (aliases,
+/// contacts, topics). Only in mode "auto", where the user allowed Claude
+/// Code, and only from the settings window; `None` otherwise. The answer is
+/// checked by the frontend and always shown in a form before anything is
+/// written.
+#[tauri::command]
+pub async fn adversum_profile_extract(
+    app: AppHandle,
+    window: WebviewWindow,
+    sentence: String,
+    instructions: String,
+    schema: String,
+) -> Result<Option<String>, String> {
+    if window.label() != "settings" {
+        return Err("Window is not authorized to ask a language model".into());
+    }
+    if sentence.chars().count() > MAX_SENTENCE_CHARS
+        || instructions.chars().count() > MAX_PROMPT_CHARS
+        || schema.chars().count() > MAX_PROMPT_CHARS
+    {
+        return Err("Too much text for the language model".into());
+    }
+    if mode(&super::settings::read(&app)) != "auto" {
+        return Ok(None);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let cli = claude_cli()?;
+        match ask_claude(&cli, &sentence, &instructions, &schema) {
+            Ok(output) => Some(output),
+            Err(error) => {
+                log::info!("Customer profile: {error}");
+                None
+            }
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

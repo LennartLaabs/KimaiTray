@@ -275,6 +275,7 @@ pub fn run() {
             adversum::brain::adversum_brain_delete,
             adversum::multi::adversum_multi_status,
             adversum::multi::adversum_multi_extract,
+            adversum::multi::adversum_profile_extract,
         ])
         .setup(|app| {
             info!(

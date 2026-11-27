@@ -1069,6 +1069,39 @@
       "button": "Falsch verstanden",
       "flagged": "Falsch verstanden ✓",
       "reviewHint": "Merkt sich den Satz, was erkannt wurde und was du stattdessen einträgst. Bleibt auf diesem Mac."
+    },
+    "profile": {
+      "open": "Steckbrief",
+      "openFor": "Steckbrief von {{name}}",
+      "aliases": "Aliasse",
+      "aliasesPlaceholder": "Huber, BH",
+      "contacts": "Kontakte",
+      "contactsPlaceholder": "Giuseppe (Gigi), Christian",
+      "topics": "Themen",
+      "topicsPlaceholder": "Roll-Ups, Messestand, Newsletter",
+      "sentence": "Per Satz ergänzen",
+      "sentencePlaceholder": "z. B. Ansprechpartner Sepp Huber, intern sagen wir Huber, wir machen Website",
+      "apply": "Auswerten",
+      "dictate": "Steckbrief per Sprache ergänzen",
+      "stopDictating": "Stopp und auswerten",
+      "save": "In Kimai speichern",
+      "saved": "In Kimai gespeichert. Gilt für alle im Team.",
+      "suggested": "Vorschlag aus den Kimai-Daten. Bitte prüfen und speichern.",
+      "problem": {
+        "forbidden": "Kimai erlaubt dir nicht, diesen Eintrag zu bearbeiten. Bitte jemanden mit den Rechten fragen.",
+        "failed": "Das Speichern in Kimai hat nicht geklappt.",
+        "voice": "Die Aufnahme hat nichts Verwertbares ergeben."
+      },
+      "hint": {
+        "newCustomer": "Neuer Kunde: {{name}} – kurz einrichten?",
+        "setUp": "Einrichten",
+        "later": "Später",
+        "add": "„{{text}}“ zu {{customer}} hinzufügen?",
+        "yes": "Hinzufügen",
+        "no": "Nein",
+        "notSaved": "Kimai hat das Speichern nicht erlaubt.",
+        "ok": "OK"
+      }
     }
   }
 }

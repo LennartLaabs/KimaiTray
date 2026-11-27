@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getActivities } from "../../api/activityApi";
 import { getCustomers, getProjects } from "../../api/projectApi";
 import { useKimaiClient } from "../../hooks/useKimaiClient";
 import { usePlatform } from "../../platform";
-import { Segmented, TextInput } from "../../settings/Controls";
+import { Segmented, TextInput, buttonClass } from "../../settings/Controls";
 import {
   SettingsList,
   SettingsNote,
@@ -14,7 +15,10 @@ import {
   SettingsWarning,
 } from "../../settings/SettingsLayout";
 import { normalizeText } from "../quickEntry/normalize";
+import { PROFILE_SETUP_EVENT } from "../profile/ProfileHints";
+import { parseProfile, profileLines } from "../profile/profileText";
 import AcceleratorInput from "./AcceleratorInput";
+import ProfileEditor from "./ProfileEditor";
 import {
   emptyConnectionAliases,
   type AdversumSettings,
@@ -30,6 +34,8 @@ const SHORTCUTS: readonly ShortcutKey[] = ["shortcutQuickEntry", "shortcutPrevio
 interface AliasEntity {
   id: number;
   name: string;
+  /** Kimai's description, which holds the profile. */
+  comment: string | null;
   /** Shown under the name, e.g. the customer of a project. */
   context: string;
 }
@@ -58,6 +64,23 @@ export default function QuickEntrySection() {
   const [rejected, setRejected] = useState<ShortcutKey | null>(null);
   const [kind, setKind] = useState<AliasKind>("customers");
   const [filter, setFilter] = useState("");
+  const [openProfile, setOpenProfile] = useState<number | null>(null);
+  const qc = useQueryClient();
+
+  // "Neuer Kunde: X – kurz einrichten?" in the popup leads here.
+  useEffect(() => {
+    const listener = getCurrentWindow().listen<{ customerId: number }>(
+      PROFILE_SETUP_EVENT,
+      ({ payload }) => {
+        setKind("customers");
+        setFilter("");
+        setOpenProfile(payload.customerId);
+      },
+    );
+    return () => {
+      void listener.then((unlisten) => unlisten()).catch(() => undefined);
+    };
+  }, []);
 
   const customersQ = useQuery({
     queryKey: ["customers", scope],
@@ -87,12 +110,18 @@ export default function QuickEntrySection() {
       projects.find((project) => project.id === id)?.name ?? "";
     const list: AliasEntity[] =
       kind === "customers"
-        ? customers.map(({ id, name }) => ({ id, name, context: "" }))
+        ? customers.map(({ id, name, comment }) => ({ id, name, comment, context: "" }))
         : kind === "projects"
-          ? projects.map(({ id, name, customer }) => ({ id, name, context: customerName(customer) }))
-          : (activitiesQ.data ?? []).map(({ id, name, project }) => ({
+          ? projects.map(({ id, name, customer, comment }) => ({
               id,
               name,
+              comment,
+              context: customerName(customer),
+            }))
+          : (activitiesQ.data ?? []).map(({ id, name, project, comment }) => ({
+              id,
+              name,
+              comment,
               context: projectName(project),
             }));
     const query = normalizeText(filter);
@@ -207,12 +236,25 @@ export default function QuickEntrySection() {
             </div>
           </div>
           {entities.map((entity) => (
-            <AliasRow
-              key={`${kind}-${entity.id}`}
-              entity={entity}
-              aliases={aliases[kind][String(entity.id)] ?? []}
-              onSave={(list) => saveAliases(entity.id, list)}
-            />
+            <div key={`${kind}-${entity.id}`}>
+              <AliasRow
+                entity={entity}
+                aliases={aliases[kind][String(entity.id)] ?? []}
+                onSave={(list) => saveAliases(entity.id, list)}
+                profileOpen={openProfile === entity.id}
+                onToggleProfile={() =>
+                  setOpenProfile((current) => (current === entity.id ? null : entity.id))
+                }
+              />
+              {openProfile === entity.id && client && (
+                <ProfileEditor
+                  client={client}
+                  kind={kind}
+                  entity={entity}
+                  onSaved={() => void qc.invalidateQueries({ queryKey: [kind, scope] })}
+                />
+              )}
+            </div>
           ))}
           {entities.length === 0 && (
             <p className="px-4 py-3 text-[12px] text-[var(--s-fg-subtle)]">
@@ -225,13 +267,20 @@ export default function QuickEntrySection() {
   );
 }
 
+/** "Kontakte: Giuseppe (Gigi) · Themen: Flyer": the profile at a glance. */
+function profileSummary(comment: string | null): string {
+  return profileLines(parseProfile(comment)).join(" · ");
+}
+
 interface AliasRowProps {
+  profileOpen: boolean;
+  onToggleProfile: () => void;
   entity: AliasEntity;
   aliases: readonly string[];
   onSave: (aliases: string[]) => void;
 }
 
-function AliasRow({ entity, aliases, onSave }: AliasRowProps) {
+function AliasRow({ entity, aliases, onSave, profileOpen, onToggleProfile }: AliasRowProps) {
   const { t } = useTranslation();
   const stored = aliases.join(", ");
   const [draft, setDraft] = useState(stored);
@@ -250,7 +299,21 @@ function AliasRow({ entity, aliases, onSave }: AliasRowProps) {
         {entity.context && (
           <div className="truncate text-[11.5px] text-[var(--s-fg-subtle)]">{entity.context}</div>
         )}
+        {profileSummary(entity.comment) && (
+          <div data-profile-summary className="truncate text-[11px] text-[var(--s-fg-subtle)]">
+            {profileSummary(entity.comment)}
+          </div>
+        )}
       </div>
+      <button
+        type="button"
+        aria-expanded={profileOpen}
+        aria-label={t("adversum.profile.openFor", { name: entity.name })}
+        className={buttonClass(profileOpen ? "secondary" : "ghost", "sm")}
+        onClick={onToggleProfile}
+      >
+        {t("adversum.profile.open")}
+      </button>
       <input
         type="text"
         value={draft}

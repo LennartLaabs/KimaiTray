@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAdversumDisplay } from "../display/displayStore";
 import { useAdversumSettings } from "../settings/useAdversumSettings";
-import { buildVocabulary } from "../voice/vocabulary";
+import { logger } from "../../utils/logger";
+import { PROFILES_CHANGED_EVENT } from "../profile/profileApi";
+import ProfileHints from "../profile/ProfileHints";
+import { buildVocabulary, estimateTokens } from "../voice/vocabulary";
 import { setVoiceVocabulary, startVoice } from "../voice/voiceApi";
 import { registerPopupQuick, type BridgeTask } from "./popupBridge";
 import { MULTI_REVIEW_EVENT, QUICK_WINDOW_LABEL } from "./quickEvents";
@@ -30,7 +35,7 @@ export default function AdversumPopupQuick(props: AdversumPopupQuickProps) {
 
 function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
   const { settings } = useAdversumSettings();
-  const { catalog, history } = useQuickEntryData(
+  const { catalog, history, customers, entries } = useQuickEntryData(
     options.client,
     options.timersReady,
     settings.aliases[options.connectionId],
@@ -47,14 +52,34 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
   const vocabulary = useMemo(
     () =>
       settings.voiceEnabled
-        ? // Colleagues' names are said often and should be written right.
-          buildVocabulary(catalog, aliases, [...settings.teamMembers, ...history.noteNames])
-        : "",
-    [settings.voiceEnabled, catalog, aliases, history.noteNames, settings.teamMembers],
+        ? buildVocabulary(catalog, aliases, {
+            history,
+            // Colleagues' names are said often and should be written right.
+            names: [...settings.teamMembers, ...history.noteNames],
+          })
+        : null,
+    [settings.voiceEnabled, catalog, aliases, history, settings.teamMembers],
   );
   useEffect(() => {
-    if (vocabulary) void setVoiceVocabulary(vocabulary).catch(() => undefined);
+    if (!vocabulary?.prompt) return;
+    logger.info(
+      `Voice vocabulary: ${vocabulary.terms.length} terms, about ${estimateTokens(vocabulary.prompt)} tokens: ${vocabulary.terms.join(", ")}`,
+    );
+    void setVoiceVocabulary(vocabulary.prompt).catch(() => undefined);
   }, [vocabulary]);
+
+  // A profile was saved in another window: read Kimai's lists again now.
+  const qc = useQueryClient();
+  useEffect(() => {
+    const listener = getCurrentWindow().listen(PROFILES_CHANGED_EVENT, () => {
+      for (const key of ["customers", "projects", "activities"]) {
+        void qc.invalidateQueries({ queryKey: [key] });
+      }
+    });
+    return () => {
+      void listener.then((unlisten) => unlisten()).catch(() => undefined);
+    };
+  }, [qc]);
 
   useEffect(() => {
     registerPopupQuick({
@@ -85,7 +110,8 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
 
   if (hidden) return null;
   return (
-    <QuickEntryBar
+    <>
+      <QuickEntryBar
       variant="popup"
       catalog={catalog}
       history={history}
@@ -104,6 +130,16 @@ function PopupQuick({ hidden, ...options }: AdversumPopupQuickProps) {
           .then(() => emitTo(QUICK_WINDOW_LABEL, MULTI_REVIEW_EVENT, { sentence }))
           .catch(() => undefined)
       }
-    />
+      />
+      {options.client && (
+        <ProfileHints
+          client={options.client}
+          connectionId={options.connectionId}
+          customers={customers}
+          entries={entries}
+          catalog={catalog}
+        />
+      )}
+    </>
   );
 }

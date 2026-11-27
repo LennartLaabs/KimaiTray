@@ -368,6 +368,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   adversum_brain_download: () => null,
   adversum_brain_delete: () => null,
   adversum_multi_extract: () => null,
+  // A sentence about a customer is read by the rules alone here.
+  adversum_profile_extract: () => null,
   adversum_voice_devices: () => [
     { id: "coreaudio:usb", name: "Trust USB microphone", isDefault: true },
     { id: "coreaudio:teams", name: "Microsoft Teams Audio", isDefault: false },

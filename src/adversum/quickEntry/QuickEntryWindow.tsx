@@ -2,8 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { emitTo } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useQueryClient } from "@tanstack/react-query";
 import { useKimaiClient } from "../../hooks/useKimaiClient";
 import { describeAction, saveMisunderstood } from "../feedback/feedback";
+import { withVariant } from "../profile/hints";
+import { loadEntity, PROFILES_CHANGED_EVENT, saveProfile } from "../profile/profileApi";
+import { parseProfile } from "../profile/profileText";
 import { useLanguageSync } from "../../hooks/useLanguageSync";
 import { currentPlatform } from "../../platform";
 import { logger } from "../../utils/logger";
@@ -76,6 +80,7 @@ export default function QuickEntryWindow() {
     settings.aliases[activeConnectionId],
     settings.teamMembers,
   );
+  const qc = useQueryClient();
   const [stage, setStage] = useState<Stage>({ name: "idle" });
   const [focus, setFocus] = useState({ request: 0, text: "" });
   /** Set while the bar holds a voice input the user is correcting by hand. */
@@ -104,6 +109,11 @@ export default function QuickEntryWindow() {
       currentWindow.listen<VoiceState>(VOICE_STATE_EVENT, ({ payload }) => {
         setStage({ name: "voice", state: payload });
       }),
+      currentWindow.listen(PROFILES_CHANGED_EVENT, () => {
+        for (const key of ["customers", "projects", "activities"]) {
+          void qc.invalidateQueries({ queryKey: [key] });
+        }
+      }),
       currentWindow.listen<MultiReviewRequest>(MULTI_REVIEW_EVENT, ({ payload }) => {
         setStage({ name: "multi", sentence: payload.sentence, reading: null, spoken: false });
       }),
@@ -122,7 +132,7 @@ export default function QuickEntryWindow() {
         void listener.then((unlisten) => unlisten()).catch(() => undefined);
       }
     };
-  }, []);
+  }, [qc]);
 
   // Present each toast once it is rendered, and take it away after a while.
   const toast = stage.name === "toast" ? stage.toast : null;
@@ -201,10 +211,21 @@ export default function QuickEntryWindow() {
             (item) => item.key === combinationKey(action.projectId, action.activityId),
           )
         : undefined;
-    send(
-      action,
-      origin && chosen ? aliasesToLearn({ ...origin, chosen, catalog }) : [],
-    );
+    const learned = origin && chosen ? aliasesToLearn({ ...origin, chosen, catalog }) : [];
+    // A correction of something misunderstood is worth knowing for everyone:
+    // the word goes into the customer's profile in Kimai, with the contact
+    // it sounds like or as an alias. (It is learned on this Mac as well, in
+    // case Kimai does not let this user write.)
+    if (origin?.misunderstood && client) {
+      for (const { entityId, alias } of learned.filter((item) => item.kind === "customers")) {
+        void loadEntity(client, "customers", entityId)
+          .then((entity) =>
+            saveProfile(client, "customers", entityId, withVariant(parseProfile(entity.comment), alias)),
+          )
+          .catch(report);
+      }
+    }
+    send(action, learned);
   };
 
   // A spoken sentence with several activities goes to the review instead of

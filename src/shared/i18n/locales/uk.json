@@ -1069,6 +1069,39 @@
       "button": "Misunderstood",
       "flagged": "Misunderstood ✓",
       "reviewHint": "Keeps the sentence, what was understood and what you enter instead. Stays on this Mac."
+    },
+    "profile": {
+      "open": "Profile",
+      "openFor": "Profile of {{name}}",
+      "aliases": "Aliases",
+      "aliasesPlaceholder": "Huber, BH",
+      "contacts": "Contacts",
+      "contactsPlaceholder": "Giuseppe (Gigi), Christian",
+      "topics": "Topics",
+      "topicsPlaceholder": "Roll-ups, trade fair stand, newsletter",
+      "sentence": "Add by a sentence",
+      "sentencePlaceholder": "e.g. Ansprechpartner Sepp Huber, intern sagen wir Huber, wir machen Website",
+      "apply": "Read",
+      "dictate": "Add to the profile by voice",
+      "stopDictating": "Stop and read",
+      "save": "Save in Kimai",
+      "saved": "Saved in Kimai. Applies to everyone on the team.",
+      "suggested": "Suggested from Kimai's data. Please check and save.",
+      "problem": {
+        "forbidden": "Kimai does not let you edit this entry. Please ask someone who may.",
+        "failed": "Saving in Kimai did not work.",
+        "voice": "The recording gave nothing usable."
+      },
+      "hint": {
+        "newCustomer": "New customer: {{name}} – set up briefly?",
+        "setUp": "Set up",
+        "later": "Later",
+        "add": "Add \"{{text}}\" to {{customer}}?",
+        "yes": "Add",
+        "no": "No",
+        "notSaved": "Kimai did not allow saving.",
+        "ok": "OK"
+      }
     }
   }
 }

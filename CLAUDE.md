@@ -42,6 +42,13 @@ A sentence with several activities is read by rules (`src/adversum/multi/`). Onl
 - **Claude Code** is the fallback (`claude -p` with the user's subscription, never an API key) and only in mode "auto", because it sends the sentence to Anthropic. The command line must be logged in (`claude`, then `/login`); on 2026-11-26 it was not. Do not run `claude -p` in tests or scripts with real customer data.
 - The Swift helper for Apple's on-device model (`scripts/adversum/extract/`) is shelved: not built, not shipped, never run.
 
+## Customer profiles in Kimai
+
+Aliases, contacts and topics of a customer (aliases and topics of a project or activity) are lines in the entity's description in Kimai, shared by the team; see "Customer profiles" in `src/adversum/README.md`. Before this (2026-11-27) aliases existed only in each Mac's settings.
+
+- The app reads `comment` from the list endpoints and writes with `PATCH /api/customers|projects|activities/{id}` and `{ "comment": … }`, after a fresh `GET`. That this works against the real Kimai, and which roles may do it, has not been tried: the tests use a stand-in client, and I never use Lennart's token. Check it with him first when a report is about saving.
+- Never write anything but the three profile lines into a description, and never drop text that is there.
+
 ## Sentences that were misunderstood
 
 "Falsch verstanden" in the confirmation card and in the review of several entries appends one JSON line per click to `/Volumes/AdversumDev/feedback/falsch-verstanden.jsonl` (on a Mac without the development volume: `~/Library/Application Support/io.adversum.kimaitray/adversum/feedback/`). Each line has `sentence` (as heard or typed), `source` ("voice" or "typed"), `recognized` (what the app showed), `corrected` (what was entered instead; `null` when the user gave up), `time` and `build`. The file holds real customer names and notes: it stays on this Mac, is never committed and never pasted into anything that leaves it.

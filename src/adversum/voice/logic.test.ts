@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCatalog } from "../quickEntry/catalog";
+import { buildHistory } from "../quickEntry/history";
 import { EMPTY_HISTORY } from "../quickEntry/history";
 import { parseQuickEntry, type QuickSuggestion } from "../quickEntry/parse";
 
@@ -7,7 +8,13 @@ const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 
 import { aliasesToLearn, resemblance, withoutLearned } from "./learn";
-import { buildVocabulary } from "./vocabulary";
+import {
+  buildVocabulary,
+  estimateTokens,
+  isHardToWrite,
+  rankVocabulary,
+  VOCABULARY_TOKEN_BUDGET,
+} from "./vocabulary";
 import {
   cancelVoice,
   cancelVoiceDownload,
@@ -68,24 +75,85 @@ beforeEach(() => {
 });
 
 describe("buildVocabulary", () => {
-  it("lists projects, activities, aliases and customers, each once", () => {
-    expect(buildVocabulary(catalog, aliases)).toBe(
-      "Projekte: Retainer, Imagefilm, Messeauftritt, Kampagne. " +
-        "Tätigkeiten: Projektmanagement, Design, Austausch. " +
-        "Kürzel: pm, kk, K und K. " +
-        "Kunden: DUSW, SolarTech NRW, K&K Global Solutions, Solar Team.",
+  it("names customers, colleagues, projects, activities and aliases, each once, the first last", () => {
+    const { prompt, terms } = buildVocabulary(catalog, aliases, {
+      names: ["Gigi", "Patrick", "gigi"],
+    });
+    // Customers, then colleagues and names, projects, activities (the one
+    // that is hard to write first), the user's own aliases.
+    expect(terms).toEqual([
+      "DUSW", "SolarTech NRW", "K&K Global Solutions", "Solar Team", "Gigi", "Patrick",
+      "Retainer", "Imagefilm", "Messeauftritt", "Kampagne", "Austausch", "Projektmanagement",
+      "Design", "kk", "K und K", "pm",
+    ]);
+    expect(prompt).toBe(`Namen: ${[...terms].reverse().join(", ")}.`);
+  });
+
+  it("is empty without a catalog and leaves out what there is none of", () => {
+    expect(buildVocabulary(buildCatalog([], [], []), undefined)).toEqual({ prompt: "", terms: [] });
+    expect(buildVocabulary(catalog, undefined).prompt).not.toContain("pm,");
+  });
+
+  it("knows which names are hard to write", () => {
+    for (const hard of ["SolarTech", "DUSW", "K&K", "Giuseppe", "Cheval", "Web3"]) {
+      expect(isHardToWrite(hard)).toBe(true);
+    }
+    for (const easy of ["Huber", "Adversum", "Design", "Retainer"]) {
+      expect(isHardToWrite(easy)).toBe(false);
+    }
+    expect(estimateTokens("")).toBe(0);
+    expect(estimateTokens("Namen: DUSW.")).toBe(5);
+  });
+
+  it("stays within Whisper's token limit with thirty customers and puts the relevant ones in", () => {
+    const names = [
+      "Aurelia Dental", "Brauhaus Lindner", "Cyclewerk", "Dachdeckerei Böhm", "Elbkind Studio",
+      "Fahrschule Yilmaz", "Gärtnerei Thyssen", "Hotel Seeblick", "Immobilien Quast", "Juwelier Rath",
+      "Kanzlei Dr. Petzold", "Lackiererei Schuh", "Möbelhaus Phoenix", "Naturkost Geiger",
+      "Optik Lenz", "Physio am Park", "Quartier 21", "Reisebüro Xanten", "Steuerbüro Hoffmann & Co",
+      "Tischlerei Ohm", "Umzüge Yildiz", "Vinothek Cheval", "Werkstatt Joost", "Xtra Fitness",
+      "Yachtclub Rhein", "Zahnzentrum Köln", "Bäckerei Huber GmbH", "SolarTech NRW", "DUSW", "K&K Global Solutions",
+    ];
+    const thirty = buildCatalog(
+      names.map((name, index) => ({
+        id: index + 1,
+        name,
+        comment: `Kontakte: Kontaktperson${index} (Kurzname${index}), Frau Beispiel${index}\nAliasse: Alias${index}`,
+      })),
+      names.map((_, index) => ({ id: 100 + index, name: `Projekt ${index}`, customer: index + 1 })),
+      [{ id: 1, name: "Projektmanagement", project: null }],
     );
-  });
-
-  it("puts recurring names from past notes first, where they are cut first", () => {
-    expect(
-      buildVocabulary(catalog, undefined, ["Gigi", "Patrick", "gigi"]),
-    ).toMatch(/^Notizen: Gigi, Patrick\. Projekte: /);
-  });
-
-  it("leaves out empty groups and is empty without a catalog", () => {
-    expect(buildVocabulary(catalog, undefined)).not.toContain("Kürzel");
-    expect(buildVocabulary(buildCatalog([], [], []), aliases)).toBe("");
+    // The last three customers are the ones booked lately; the 27th most of all.
+    const used = buildHistory(
+      [
+        ...Array.from({ length: 8 }, (_, day) => ({ projectId: 126, activityId: 1, begin: new Date(2026, 10, 25 - day, 10) })),
+        ...Array.from({ length: 4 }, (_, day) => ({ projectId: 128, activityId: 1, begin: new Date(2026, 10, 25 - day, 10) })),
+        { projectId: 129, activityId: 1, begin: new Date(2026, 10, 20, 10) },
+      ],
+      now,
+    );
+    const { prompt, terms } = buildVocabulary(thirty, undefined, {
+      history: used,
+      now,
+      names: ["Patrick"],
+    });
+    expect(estimateTokens(prompt)).toBeLessThanOrEqual(VOCABULARY_TOKEN_BUDGET);
+    expect(VOCABULARY_TOKEN_BUDGET).toBeLessThan(224);
+    // The customers in use come first, with their contacts and aliases.
+    expect(terms.slice(0, 5)).toEqual([
+      "Bäckerei Huber GmbH", "Kontaktperson26", "Kurzname26", "Frau Beispiel26", "Alias26",
+    ]);
+    expect(terms.indexOf("DUSW")).toBeLessThan(terms.indexOf("K&K Global Solutions"));
+    expect(terms).toContain("Kontaktperson28");
+    // What matters most stands at the end, where Whisper reads.
+    expect(prompt.endsWith("Kurzname26, Kontaktperson26, Bäckerei Huber GmbH.")).toBe(true);
+    // Not everything fits, and what does not is the least used.
+    expect(terms.length).toBeLessThan(rankVocabulary(thirty, undefined).length);
+    expect(terms).not.toContain("Projektmanagement");
+    // A tighter budget takes fewer terms, never a cut one.
+    const tight = buildVocabulary(thirty, undefined, { history: used, now, tokenBudget: 20 });
+    expect(estimateTokens(tight.prompt)).toBeLessThanOrEqual(20);
+    expect(tight.terms[0]).toBe("Bäckerei Huber GmbH");
   });
 });
 

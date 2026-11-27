@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   executor: { execute: vi.fn(), undo: vi.fn(), toast: null as unknown },
   useQuickExecutor: vi.fn(),
   loggerError: vi.fn(),
+  loggerInfo: vi.fn(),
   os: "macos",
   startVoice: vi.fn(),
   cancelVoice: vi.fn(),
@@ -33,6 +34,13 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   extractWithModel: vi.fn(),
   saveMisunderstood: vi.fn(),
+  loadEntity: vi.fn(),
+  saveProfile: vi.fn(),
+}));
+vi.mock("../profile/profileApi", async (original) => ({
+  ...(await original<typeof import("../profile/profileApi")>()),
+  loadEntity: mocks.loadEntity,
+  saveProfile: mocks.saveProfile,
 }));
 vi.mock("../feedback/feedback", async (original) => ({
   ...(await original<typeof import("../feedback/feedback")>()),
@@ -80,7 +88,9 @@ vi.mock("../voice/voiceApi", async (original) => ({
   learnAlias: mocks.learnAlias,
   setVoiceVocabulary: mocks.setVoiceVocabulary,
 }));
-vi.mock("../../utils/logger", () => ({ logger: { error: mocks.loggerError } }));
+vi.mock("../../utils/logger", () => ({
+  logger: { error: mocks.loggerError, info: mocks.loggerInfo },
+}));
 vi.mock("../../platform", () => ({ currentPlatform: () => ({ os: mocks.os }) }));
 
 import { setAdversumDisplay } from "../display/displayStore";
@@ -165,6 +175,9 @@ beforeEach(() => {
     mock.mockResolvedValue(undefined);
   }
   mocks.learnAlias.mockResolvedValue(true);
+  mocks.loadEntity.mockResolvedValue({ name: "Herosmile", comment: null });
+  mocks.saveProfile.mockResolvedValue("");
+  localStorage.clear();
   mocks.loadSettings.mockResolvedValue({ theme: "dark", accentStyle: "purple" });
   mocks.onSettingsChange.mockResolvedValue(vi.fn());
   mocks.executor = { execute: vi.fn().mockResolvedValue(undefined), undo: vi.fn().mockResolvedValue(undefined), toast: null };
@@ -308,6 +321,26 @@ describe("AdversumPopupQuick", () => {
     await act(async () => undefined);
   });
 
+  it("reads Kimai's lists again when a profile was saved, and points out a new customer", async () => {
+    setAdversumDisplay(display);
+    localStorage.setItem("adversum-known-customers:conn", JSON.stringify({ known: [1], pending: [] }));
+    const { unmount } = render(<AdversumPopupQuick {...options} />, { wrapper });
+    await waitFor(() =>
+      expect(document.querySelector("[data-profile-hint='new']")?.textContent).toContain("Herosmile"),
+    );
+    const calls = mocks.getCustomers.mock.calls.length;
+    act(() => windowHandlers["adversum://profiles-changed"]!({ payload: null }));
+    await waitFor(() => expect(mocks.getCustomers.mock.calls.length).toBe(calls + 1));
+    unmount();
+    // Without a connection there is nobody to ask about profiles, and a
+    // window without events is no reason to fail.
+    mocks.listen.mockRejectedValue(new Error("no events"));
+    const offline = render(<AdversumPopupQuick {...options} client={null} />, { wrapper });
+    expect(document.querySelector("[data-profile-hint]")).toBeNull();
+    offline.unmount();
+    await act(async () => undefined);
+  });
+
   it("starts a task in between from a context menu", () => {
     setAdversumDisplay(display);
     render(<AdversumPopupQuick {...options} />, { wrapper });
@@ -351,8 +384,12 @@ describe("AdversumPopupQuick", () => {
     render(<AdversumPopupQuick {...options} />, { wrapper });
     await waitFor(() =>
       expect(mocks.setVoiceVocabulary).toHaveBeenCalledWith(
-        "Notizen: Patrick, Michi, Ema, Lennart. Projekte: Retainer, Social. Tätigkeiten: Projektmanagement. Kürzel: pm. Kunden: DUSW, Herosmile.",
+        "Namen: pm, Projektmanagement, Retainer, Social, Lennart, Ema, Michi, Patrick, Herosmile, DUSW.",
       ),
+    );
+    // Which terms went into the prompt is in the log.
+    expect(mocks.loggerInfo).toHaveBeenCalledWith(
+      expect.stringMatching(/^Voice vocabulary: 10 terms, about \d+ tokens: DUSW, Herosmile, /),
     );
     fireEvent.click(screen.getByRole("button", { name: "adversum.voice.speak" }));
     expect(mocks.startVoice).toHaveBeenCalledTimes(1);
@@ -370,7 +407,7 @@ describe("AdversumPopupQuick", () => {
 describe("QuickEntryWindow", () => {
   async function renderWindow() {
     const view = render(<QuickEntryWindow />, { wrapper });
-    await waitFor(() => expect(Object.keys(windowHandlers)).toHaveLength(4));
+    await waitFor(() => expect(Object.keys(windowHandlers)).toHaveLength(5));
     return view;
   }
 
@@ -519,6 +556,10 @@ describe("QuickEntryWindow", () => {
       const { container } = await renderWindow();
       await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
       await act(async () => undefined);
+      // A profile saved elsewhere: Kimai's lists are read again here too.
+      const calls = mocks.getCustomers.mock.calls.length;
+      act(() => windowHandlers["adversum://profiles-changed"]!({ payload: null }));
+      await waitFor(() => expect(mocks.getCustomers.mock.calls.length).toBe(calls + 1));
       act(() => windowHandlers[MULTI_REVIEW_EVENT]!({ payload: { sentence: SEVERAL } }));
       await waitFor(() => expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(2));
       fireEvent.keyDown(review(container)!, { key: "Escape" });
@@ -653,6 +694,17 @@ describe("QuickEntryWindow", () => {
         recognized: expect.objectContaining({ task: "DUSW · Retainer · Projektmanagement" }),
         corrected: expect.objectContaining({ task: "Herosmile · Social · Projektmanagement" }),
       });
+
+      // The corrected word is a spelling everyone should have: it goes into
+      // the customer's profile in Kimai.
+      await waitFor(() =>
+        expect(mocks.saveProfile).toHaveBeenCalledWith(mocks.kimai.client, "customers", 2, {
+          aliases: ["Herosteil"],
+          contacts: [],
+          topics: [],
+        }),
+      );
+      expect(mocks.loadEntity).toHaveBeenCalledWith(mocks.kimai.client, "customers", 2);
 
       // Given up instead of corrected.
       act(() =>
