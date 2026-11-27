@@ -396,9 +396,20 @@ pub fn adversum_voice_set_vocabulary(
     if vocabulary.len() > 64 * 1024 {
         return Err("Vocabulary is too large".into());
     }
-    *VOCABULARY
+    let clamped = clamp_vocabulary(&vocabulary);
+    let mut current = VOCABULARY
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = clamp_vocabulary(&vocabulary);
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if *current != clamped {
+        // The window's own log lines do not reach the file in release builds,
+        // so the terms the speech model is primed with are logged here.
+        log::info!(
+            "Voice vocabulary, {} characters: {}",
+            clamped.chars().count(),
+            clamped
+        );
+        *current = clamped;
+    }
     Ok(())
 }
 
