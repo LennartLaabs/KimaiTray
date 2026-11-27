@@ -28,18 +28,15 @@ import {
   reloadModelInternally,
 } from "../voice/voiceApi";
 import AcceleratorInput from "./AcceleratorInput";
+import BrainSection from "./BrainSection";
+import { formatSize } from "./formatSize";
 import MicrophoneTest from "./MicrophoneTest";
 import type { VoiceModel } from "./adversumSettings";
 import { useAdversumSettings } from "./useAdversumSettings";
 
 type Problem = "download" | "folder" | "shortcut";
 
-/** "488 MB", "1.6 GB": decimal units, as Finder shows them. */
-export function formatSize(bytes: number): string {
-  return bytes >= 1e9
-    ? `${(bytes / 1e9).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
-    : `${Math.round(bytes / 1e6)} MB`;
-}
+export { formatSize };
 
 function ignore(): void {
   // Outcomes arrive as events or through the next status read.
@@ -447,6 +444,7 @@ export default function VoiceSection() {
           />
         </SettingsRow>
       </SettingsList>
+      <BrainSection />
       <SettingsNote>{t("adversum.voice.settings.privacy")}</SettingsNote>
     </SettingsPage>
   );

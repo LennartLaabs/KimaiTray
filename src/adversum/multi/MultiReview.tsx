@@ -225,7 +225,7 @@ export default function MultiReview({
         </span>
         <span className="text-[11px] text-gray-500 dark:text-gray-400">
           {dayLabel(draft.day ?? now, now, i18n.language)}
-          {draft.source !== "rules" && ` · ${t(`adversum.multi.source.${draft.source}`)}`}
+          {` · ${t(`adversum.multi.source.${draft.source}`)}`}
           {refining && ` · ${t("adversum.multi.refining")}`}
         </span>
       </div>

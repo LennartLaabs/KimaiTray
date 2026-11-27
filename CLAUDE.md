@@ -33,11 +33,13 @@ This has gone wrong twice on 2026-11-26: the universal bundle left in `src-tauri
 
 ## Language models for several entries
 
-A sentence with several activities is read by rules (`src/adversum/multi/`). Only where they are unsure, a model may extract the activities; it never calculates. See "Several entries from one sentence" in `src/adversum/README.md`.
+A sentence with several activities is read by rules (`src/adversum/multi/`). Only where they are unsure, a model may extract the activities; it never calculates. See "Several entries from one sentence" in `src/adversum/README.md`. Order: rules, then the local model if its file is downloaded, then Claude Code if the setting allows it. Without any of them: rules and questions.
 
-- Apple's on-device model needs the helper `scripts/adversum/extract/extract.swift`. It only builds with the macOS 26 SDK ("Command Line Tools for Xcode 26" from Software Update, or Xcode 26); `install.sh` skips it otherwise and says so. On Lennart's Mac (2026-11-26) the SDK was 15.5 and Apple Intelligence was not switched on, so the helper has never been compiled or run. Treat it as untested until it has been.
-- The fallback is `claude -p` with the user's Claude Code subscription, never an API key. It sends the sentence to Anthropic, so the setting `multiModel` can restrict help to the Mac or switch it off. The command line must be logged in (`claude`, then `/login`); on 2026-11-26 it was not.
-- Do not run `claude -p` in tests or scripts with real customer data.
+- **Local model** (`src-tauri/src/adversum/brain.rs`, helper program `src-tauri/llm-helper`, llama.cpp through the `llama-cpp-2` crate, Metal on Apple Silicon, CPU on Intel). It is a program of its own next to the app's executable because llama.cpp and whisper.cpp each bring their own ggml; do not try to link both into the app. `scripts/adversum/llm/build.sh` builds it (`universal` for the DMG), `signing.sh` puts it into the bundle. It stays in memory for ten minutes after the last request.
+- **Models** on offer, chosen by measurement on 2026-11-27 (M1, 37 sentences): Gemma 3 4B it Q4_K_M (2.49 GB, Gemma Terms of Use, default) and Qwen 2.5 1.5B Instruct Q4_K_M (1.12 GB, Apache 2.0). Llama 3.2 3B was measured and left out (worse than Gemma on the plain sentences, 0 of 10 on the hard ones). Qwen 2.5 3B was not considered: research license, no commercial use. To measure a model again: `src/adversum/multi/localModel.bench.test.ts` (its header has the command). The three test files are in `/Volumes/AdversumDev/.cache/llm-test/`.
+- **What the measurement said**, so nobody expects more: on the 27 sentences the rules read, Gemma alone gets 21, Qwen 14. On the ten hard ones (`hardSentences.ts`) Gemma gets 2, the rules 2, both together 3. Small models find the activities and customers but make up numbers. Hence `groundExtraction` in `extract.ts`: every duration, count and clock time of a model's answer must occur in the sentence, or it is dropped and the review asks. Never remove that check.
+- **Claude Code** is the fallback (`claude -p` with the user's subscription, never an API key) and only in mode "auto", because it sends the sentence to Anthropic. The default is "device" (local only). The command line must be logged in (`claude`, then `/login`); on 2026-11-26 it was not. Do not run `claude -p` in tests or scripts with real customer data.
+- The Swift helper for Apple's on-device model (`scripts/adversum/extract/`) is shelved: not built, not shipped, never run.
 
 ## Code signing and the keychain
 

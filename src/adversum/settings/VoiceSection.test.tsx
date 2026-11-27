@@ -37,6 +37,7 @@ vi.mock("./AcceleratorInput", () => ({
   ),
 }));
 vi.mock("./MicrophoneTest", () => ({ default: () => <div>microphone-test</div> }));
+vi.mock("./BrainSection", () => ({ default: () => <div>brain-section</div> }));
 vi.mock("../voice/voiceApi", async (original) => ({
   ...(await original<typeof import("../voice/voiceApi")>()),
   getVoiceStatus: mocks.getVoiceStatus,

@@ -14,9 +14,7 @@ const mocks = vi.hoisted(() => ({
   getCustomers: vi.fn(),
   getProjects: vi.fn(),
   getActivities: vi.fn(),
-  getMultiModelStatus: vi.fn(),
 }));
-vi.mock("../multi/extract", () => ({ getMultiModelStatus: mocks.getMultiModelStatus }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, string>) =>
@@ -83,7 +81,6 @@ beforeEach(() => {
     { id: 1, name: "Projektmanagement", project: null },
     { id: 6, name: "Reporting", project: 11 },
   ]);
-  mocks.getMultiModelStatus.mockResolvedValue({ mode: "auto", apple: "missing", claude: true });
 });
 afterEach(cleanup);
 
@@ -175,43 +172,6 @@ describe("QuickEntrySection", () => {
   function aliasField(name: string): HTMLInputElement {
     return screen.getByLabelText(`adversum.quickSettings.aliasesFor:${name}`) as HTMLInputElement;
   }
-
-  it("chooses which language model may help with several entries, and says which are there", async () => {
-    await renderSection();
-    const models = () => document.querySelector("[data-multi-models]")?.textContent;
-    await waitFor(() =>
-      expect(models()).toBe(
-        "adversum.quickSettings.multiModelApple.missing:missing · adversum.quickSettings.multiModelClaude.found",
-      ),
-    );
-    fireEvent.click(screen.getByText("adversum.quickSettings.multiModelMode.device"));
-    expect(mocks.settings.update).toHaveBeenCalledWith("multiModel", "device");
-
-    cleanup();
-    mocks.getMultiModelStatus.mockResolvedValue({
-      mode: "auto",
-      apple: "unavailable: appleIntelligenceNotEnabled",
-      claude: false,
-    });
-    await renderSection();
-    await waitFor(() =>
-      expect(models()).toBe(
-        "adversum.quickSettings.multiModelApple.unavailable:unavailable: appleIntelligenceNotEnabled · adversum.quickSettings.multiModelClaude.missing",
-      ),
-    );
-
-    // Outside the app, or after the page is gone, there is nothing to show.
-    cleanup();
-    mocks.getMultiModelStatus.mockRejectedValue(new Error("no native side"));
-    await renderSection();
-    expect(models()).toBeUndefined();
-    cleanup();
-    let answer!: (value: unknown) => void;
-    mocks.getMultiModelStatus.mockReturnValue(new Promise((resolve) => (answer = resolve)));
-    render(<QuickEntrySection />, { wrapper });
-    cleanup();
-    await act(async () => answer({ mode: "auto", apple: "available", claude: true }));
-  });
 
   it("keeps the list of team members", async () => {
     await renderSection();

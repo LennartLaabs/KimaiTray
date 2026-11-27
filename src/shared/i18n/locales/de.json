@@ -874,22 +874,6 @@
       "aliasesFor": "Aliasse für {{name}}",
       "noConnection": "Mit Kimai verbinden, um Aliasse zu pflegen.",
       "noEntries": "Nichts gefunden.",
-      "multiModel": "Sprachmodell für mehrere Einträge",
-      "multiModelDescription": "Nennt ein Satz mehrere Tätigkeiten, zerlegen ihn feste Regeln. Nur wo die unsicher sind, darf ein Sprachmodell die Tätigkeiten herauslesen; gerechnet wird immer in der App. „Automatisch“ nutzt Apple Intelligence auf diesem Mac und sonst Claude Code mit deinem Abo, dabei geht der Satz an Anthropic. „Nur auf diesem Mac“ schickt nichts weg.",
-      "multiModelMode": {
-        "auto": "Automatisch",
-        "device": "Nur auf diesem Mac",
-        "off": "Aus"
-      },
-      "multiModelApple": {
-        "available": "Apple Intelligence: bereit",
-        "missing": "Apple Intelligence: Helfer fehlt in diesem Build",
-        "unavailable": "Apple Intelligence: nicht verfügbar ({{reason}})"
-      },
-      "multiModelClaude": {
-        "found": "Claude Code: gefunden",
-        "missing": "Claude Code: nicht installiert"
-      },
       "team": "Teammitglieder",
       "teamDescription": "Vornamen aus dem Team, mit Komma getrennt. Sie gelten in einem Satz als Personen, mit denen man arbeitet: Sie stehen in der Notiz („Call mit Patrick“) und bestimmen nie den Kunden.",
       "teamPlaceholder": "Patrick, Michi, …"
@@ -1000,8 +984,9 @@
       "title": "Prüfen und eintragen · {{count}}",
       "offer": "Mehrere Einträge erkannt ({{count}}) · ↵ prüfen",
       "source": {
-        "apple": "mit Apple Intelligence gelesen",
-        "claude": "mit Claude Code gelesen"
+        "rules": "nach Regeln",
+        "local": "lokales Modell",
+        "claude": "Claude Code"
       },
       "refining": "wird genauer gelesen …",
       "loading": "Einträge des Tages werden geladen …",
@@ -1051,6 +1036,34 @@
       "hintQuestions": "Erst die gelben Rückfragen beantworten oder weglassen",
       "submit": "Eintragen",
       "toastLabel": "{{count}}× ({{duration}})"
+    },
+    "brain": {
+      "title": "KI-Modell für komplexe Sätze",
+      "description": "Ein Sprachmodell, das auf diesem Mac läuft. Es hilft nur bei Sätzen, die die festen Regeln nicht sicher zerlegen können, und liest nur heraus, was gesagt wurde; gerechnet wird immer in der App. Nichts verlässt den Mac, kein Konto nötig. Nach Benutzung bleibt es 10 Minuten im Arbeitsspeicher.",
+      "noHelper": "Diesem Build fehlt das Hilfsprogramm für das lokale Modell.",
+      "models": {
+        "gemma-3-4b": {
+          "name": "Gemma 3 4B",
+          "note": "Liest am meisten richtig, etwa 3 s pro Satz auf einem M1. Lizenz: Gemma Terms of Use (kommerzielle Nutzung erlaubt)."
+        },
+        "qwen-1b5": {
+          "name": "Qwen 2.5 1.5B",
+          "note": "Klein und schnell (etwa 1 s), aber deutlich ungenauer. Lizenz: Apache 2.0."
+        }
+      },
+      "modelVolume": "Das KI-Modell liegt auf „{{volume}}“, das nicht angeschlossen ist.",
+      "useInternal": "Internen Speicher verwenden",
+      "mode": "Wer darf helfen",
+      "modeDescription": "„Nur lokal“ fragt allein das Modell oben. „Lokal, sonst Claude“ fragt zusätzlich Claude Code mit deinem Abo, wenn kein lokales Modell da ist oder es scheitert; dabei geht der Satz an Anthropic.",
+      "modeOption": {
+        "device": "Nur lokal",
+        "auto": "Lokal, sonst Claude",
+        "off": "Aus"
+      },
+      "claude": {
+        "found": "Claude Code ist installiert.",
+        "missing": "Claude Code ist nicht installiert."
+      }
     }
   }
 }

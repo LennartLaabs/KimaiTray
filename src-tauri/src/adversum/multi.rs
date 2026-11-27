@@ -3,15 +3,17 @@
 //! The rules in `src/adversum/multi/segment.ts` understand most such
 //! sentences. Where they are unsure, a language model may extract the
 //! activities; it never calculates, and what it returns is checked by the
-//! frontend before use. Two models can do it, in this order:
+//! frontend before use (numbers the sentence does not contain are dropped).
+//! Two models can do it, in this order:
 //!
-//! 1. Apple's on-device model, through the small Swift helper next to the
-//!    executable (`scripts/adversum/extract/`). Nothing leaves the Mac.
+//! 1. The local model (`brain.rs`, llama.cpp in a helper program), when its
+//!    file has been downloaded. Nothing leaves the Mac, no account is needed.
 //! 2. The Claude Code command line with the user's own subscription
-//!    (`claude -p`), unless the setting restricts help to this Mac. This
-//!    sends the sentence to Anthropic. No API key is involved.
+//!    (`claude -p`), only when the setting allows it ("auto"). This sends the
+//!    sentence to Anthropic. No API key is involved.
 //!
-//! Only the sentence is handed over, never the list of customers.
+//! The local model gets the names of customers, projects and activities in
+//! its instructions; Claude Code gets the sentence alone.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -23,7 +25,6 @@ use serde_json::{Map, Value};
 use tauri::{AppHandle, WebviewWindow};
 
 pub(crate) const MODE_KEY: &str = "multiModel";
-const APPLE_HELPER: &str = "kimaitray-extract";
 const TIMEOUT: Duration = Duration::from_secs(40);
 const MAX_SENTENCE_CHARS: usize = 2_000;
 const MAX_PROMPT_CHARS: usize = 8_000;
@@ -32,17 +33,14 @@ pub(crate) fn valid_mode(mode: &str) -> bool {
     matches!(mode, "auto" | "device" | "off")
 }
 
+/// "device": the local model only (the default). "auto": the local model,
+/// and Claude Code where there is none or it fails. "off": rules only.
 fn mode(settings: &Map<String, Value>) -> &str {
     settings
         .get(MODE_KEY)
         .and_then(Value::as_str)
         .filter(|mode| valid_mode(mode))
-        .unwrap_or("auto")
-}
-
-fn apple_helper() -> Option<PathBuf> {
-    let helper = std::env::current_exe().ok()?.parent()?.join(APPLE_HELPER);
-    helper.is_file().then_some(helper)
+        .unwrap_or("device")
 }
 
 /// Where the Claude Code command line is usually installed. An app started
@@ -104,24 +102,6 @@ fn run(command: &mut Command, input: &str, timeout: Duration) -> Result<(bool, S
     Ok((status.success(), output))
 }
 
-/// "available", "missing" (this build has no helper) or the reason the
-/// on-device model cannot be used, as the helper states it.
-fn apple_status() -> String {
-    let Some(helper) = apple_helper() else {
-        return "missing".into();
-    };
-    match run(
-        Command::new(helper).arg("--check"),
-        "",
-        Duration::from_secs(10),
-    ) {
-        Ok((true, _)) => "available".into(),
-        Ok((false, reason)) if !reason.trim().is_empty() => reason.trim().to_string(),
-        Ok((false, _)) => "unavailable".into(),
-        Err(error) => error,
-    }
-}
-
 /// The answer inside what `claude -p --output-format json` prints: the
 /// structured output when a schema was given, else the text.
 pub(crate) fn claude_answer(printed: &str) -> Result<String, String> {
@@ -135,13 +115,6 @@ pub(crate) fn claude_answer(printed: &str) -> Result<String, String> {
         Some(structured) if structured.is_object() => Ok(structured.to_string()),
         _ if !text.is_empty() => Ok(text.to_string()),
         _ => Err("Claude Code gave no answer".into()),
-    }
-}
-
-fn ask_apple(helper: &Path, sentence: &str, instructions: &str) -> Result<String, String> {
-    match run(Command::new(helper).arg(instructions), sentence, TIMEOUT)? {
-        (true, output) if !output.trim().is_empty() => Ok(output),
-        (_, output) => Err(format!("on-device model: {}", output.trim())),
     }
 }
 
@@ -175,29 +148,37 @@ fn ask_claude(
 #[serde(rename_all = "camelCase")]
 pub struct MultiStatus {
     mode: String,
-    apple: String,
+    /// The local model can be asked: helper and a model file are there.
+    local: bool,
+    /// The Claude Code command line is installed.
     claude: bool,
 }
 
 /// Which language models could help on this machine.
 #[tauri::command]
 pub async fn adversum_multi_status(app: AppHandle) -> Result<MultiStatus, String> {
-    let mode = mode(&super::settings::read(&app)).to_string();
-    tauri::async_runtime::spawn_blocking(move || MultiStatus {
-        mode,
-        apple: apple_status(),
+    Ok(MultiStatus {
+        mode: mode(&super::settings::read(&app)).to_string(),
+        local: super::brain::ready_model(&app).is_some(),
         claude: claude_cli().is_some(),
     })
-    .await
-    .map_err(|error| error.to_string())
 }
 
 #[derive(Serialize)]
 pub struct MultiAnswer {
-    /// "apple" or "claude".
+    /// "local" or "claude".
     provider: &'static str,
     /// The model's answer, JSON as text. Checked by the frontend.
     output: String,
+}
+
+/// What the local model is asked: it gets more to read than Claude Code
+/// does, and a grammar instead of a schema.
+#[derive(serde::Deserialize)]
+pub struct LocalRequest {
+    instructions: String,
+    input: String,
+    grammar: String,
 }
 
 /// Asks a language model for the activities in a sentence. `None` when the
@@ -209,13 +190,18 @@ pub async fn adversum_multi_extract(
     sentence: String,
     instructions: String,
     schema: String,
+    local: LocalRequest,
 ) -> Result<Option<MultiAnswer>, String> {
     if window.label() != super::quick::WINDOW_LABEL {
         return Err("Window is not authorized to ask a language model".into());
     }
-    if sentence.chars().count() > MAX_SENTENCE_CHARS
-        || instructions.chars().count() > MAX_PROMPT_CHARS
-        || schema.chars().count() > MAX_PROMPT_CHARS
+    let too_long = |text: &str, limit: usize| text.chars().count() > limit;
+    if too_long(&sentence, MAX_SENTENCE_CHARS)
+        || [&instructions, &schema, &local.grammar]
+            .iter()
+            .any(|text| too_long(text, MAX_PROMPT_CHARS))
+        || too_long(&local.instructions, 2 * MAX_PROMPT_CHARS)
+        || too_long(&local.input, MAX_PROMPT_CHARS)
     {
         return Err("Too much text for the language model".into());
     }
@@ -223,12 +209,13 @@ pub async fn adversum_multi_extract(
     if mode == "off" {
         return Ok(None);
     }
+    let model = super::brain::ready_model(&app);
     tauri::async_runtime::spawn_blocking(move || {
-        if let Some(helper) = apple_helper() {
-            match ask_apple(&helper, &sentence, &instructions) {
+        if let Some(model) = model {
+            match super::brain::ask(&model, &local.instructions, &local.input, &local.grammar) {
                 Ok(output) => {
                     return Some(MultiAnswer {
-                        provider: "apple",
+                        provider: "local",
                         output,
                     })
                 }
@@ -260,13 +247,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn the_mode_defaults_to_auto_and_ignores_nonsense() {
+    fn the_mode_defaults_to_this_mac_only_and_ignores_nonsense() {
         let settings = |value: Value| value.as_object().cloned().unwrap();
-        assert_eq!(mode(&settings(json!({}))), "auto");
-        assert_eq!(mode(&settings(json!({"multiModel": "device"}))), "device");
+        assert_eq!(mode(&settings(json!({}))), "device");
+        assert_eq!(mode(&settings(json!({"multiModel": "auto"}))), "auto");
         assert_eq!(mode(&settings(json!({"multiModel": "off"}))), "off");
-        assert_eq!(mode(&settings(json!({"multiModel": "cloud"}))), "auto");
-        assert_eq!(mode(&settings(json!({"multiModel": 3}))), "auto");
+        assert_eq!(mode(&settings(json!({"multiModel": "cloud"}))), "device");
+        assert_eq!(mode(&settings(json!({"multiModel": 3}))), "device");
         assert!(valid_mode("auto") && !valid_mode(""));
     }
 

@@ -42,8 +42,10 @@ describe("normalizeAdversumSettings", () => {
         shortcutVoice: "Alt+F5",
         voiceInputDevice: "coreaudio:usb",
         voiceDebug: true,
-        multiModel: "device",
+        multiModel: "auto",
         teamMembers: [" Patrick ", "", 7, "x".repeat(41), "Ema"],
+        brainModel: "qwen-1b5",
+        brainModelDir: "/Volumes/Extern/KI",
       }),
     ).toEqual({
       customerIndicator: "dots",
@@ -58,8 +60,10 @@ describe("normalizeAdversumSettings", () => {
       shortcutVoice: "Alt+F5",
       voiceInputDevice: "coreaudio:usb",
       voiceDebug: true,
-      multiModel: "device",
+      multiModel: "auto",
       teamMembers: ["Patrick", "Ema"],
+      brainModel: "qwen-1b5",
+      brainModelDir: "/Volumes/Extern/KI",
     });
     expect(
       normalizeAdversumSettings({
@@ -76,6 +80,8 @@ describe("normalizeAdversumSettings", () => {
         voiceDebug: 1,
         multiModel: "cloud",
         teamMembers: "Patrick",
+        brainModel: "gpt",
+        brainModelDir: 7,
       }),
     ).toEqual(defaultAdversumSettings);
     expect(defaultAdversumSettings).toMatchObject({

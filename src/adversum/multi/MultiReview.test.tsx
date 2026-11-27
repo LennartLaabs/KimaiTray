@@ -103,7 +103,7 @@ describe("the review of several entries", () => {
     ]);
     expect(total(container)).toBe("adversum.multi.total:1 h");
     expect(screen.getByText(/^adversum\.multi\.title:3/)).toBeTruthy();
-    expect(screen.getByText("Heute")).toBeTruthy();
+    expect(screen.getByText("Heute · adversum.multi.source.rules")).toBeTruthy();
     expect([...container.querySelectorAll("[data-multi-duration]")].map((cell) => cell.textContent))
       .toEqual(["25 min", "10 min", "25 min"]);
 

@@ -182,9 +182,9 @@ describe("matching against the catalog", () => {
       catalog,
       history,
       now,
-      "apple",
+      "local",
     );
-    expect(draft?.source).toBe("apple");
+    expect(draft?.source).toBe("local");
     expect(draft?.items[2]).toMatchObject({ inherited: true, guessed: false });
     expect(draft?.items[2]?.suggestions[0]).toMatchObject({
       combination: { customer: "K&K Global Solutions", activity: "Design" },

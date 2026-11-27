@@ -1,53 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalog } from "../quickEntry/catalog";
-import { buildHistory } from "../quickEntry/history";
 import { readMulti } from "./draft";
+import { catalog, history, now, SENTENCES } from "./fixtures";
 import { clockText } from "./format";
 import { planEntries, type PlanChoice } from "./plan";
-
-/** Thursday 26 November 2026, 14:20. */
-const now = new Date(2026, 10, 26, 14, 20);
-
-const catalog = buildCatalog(
-  [
-    { id: 1, name: "DUSW" },
-    { id: 2, name: "SolarTech NRW" },
-    { id: 3, name: "K&K Global Solutions" },
-    { id: 4, name: "Adversum" },
-  ],
-  [
-    { id: 11, name: "Retainer", customer: 1 },
-    { id: 21, name: "Imagefilm", customer: 2 },
-    { id: 31, name: "Landingpage", customer: 3 },
-    { id: 41, name: "Intern", customer: 4 },
-  ],
-  [
-    { id: 1, name: "Projektmanagement", project: null },
-    { id: 2, name: "Austausch", project: null },
-    { id: 4, name: "Design", project: null },
-    { id: 5, name: "Entwicklung", project: null },
-    { id: 8, name: "Buchhaltung", project: null },
-  ],
-  {
-    customers: { "1": ["gigi", "giuseppe"] },
-    projects: {},
-    activities: { "2": ["call", "telefonat", "meeting"] },
-  },
-);
-// What is usually booked: design for DUSW, development for the others.
-const history = buildHistory(
-  [
-    ...Array.from({ length: 6 }, (_, index) => ({ projectId: 11, activityId: 4, days: index + 1 })),
-    ...Array.from({ length: 4 }, (_, index) => ({ projectId: 21, activityId: 5, days: index + 1 })),
-    ...Array.from({ length: 4 }, (_, index) => ({ projectId: 31, activityId: 5, days: index + 1 })),
-    ...Array.from({ length: 4 }, (_, index) => ({ projectId: 41, activityId: 8, days: index + 1 })),
-  ].map(({ projectId, activityId, days }) => ({
-    projectId,
-    activityId,
-    begin: new Date(2026, 10, 26 - days, 10, 0),
-  })),
-  now,
-);
 
 /** What a sentence becomes: one line per block, plus questions and notes. */
 function read(sentence: string, choices: Record<number, PlanChoice> = {}) {
@@ -539,6 +494,11 @@ describe("several entries from one sentence", () => {
         "suspect": false,
       }
     `);
+  });
+
+  it("has every sentence in the list the language model is measured with", () => {
+    expect(SENTENCES).toHaveLength(27);
+    for (const sentence of SENTENCES) expect(read(sentence)).toBeTruthy();
   });
 
   it("answers and switches change the plan", () => {

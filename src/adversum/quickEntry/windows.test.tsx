@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   extractWithModel: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
-vi.mock("../multi/extract", () => ({ extractWithModel: mocks.extractWithModel }));
+vi.mock("../multi/modelApi", () => ({ extractWithModel: mocks.extractWithModel }));
 vi.mock("../multi/useDayEntries", () => ({
   useDayEntries: () => ({ busy: [], running: null, ready: true }),
 }));

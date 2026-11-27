@@ -53,7 +53,8 @@ export interface Extraction {
   day: Date | null;
 }
 
-export type DraftSource = "rules" | "apple" | "claude";
+/** Who read the sentence: the rules, the local model or Claude Code. */
+export type DraftSource = "rules" | "local" | "claude";
 
 export interface DraftItem {
   id: number;

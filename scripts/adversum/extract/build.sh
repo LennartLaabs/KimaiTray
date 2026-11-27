@@ -1,4 +1,7 @@
 #!/bin/sh
+# SHELVED (2026-11-27): not part of any build. The local language model
+# (scripts/adversum/llm, llama.cpp) took this helper's place, because it
+# works on every Mac and without Apple Intelligence. Kept for reference.
 # ADVERSUM: builds the helper that asks Apple's on-device language model
 # (extract.swift) and prints its path. Prints nothing when it cannot be
 # built: the Foundation Models framework needs the macOS 26 SDK, which comes

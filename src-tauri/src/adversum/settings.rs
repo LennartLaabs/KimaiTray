@@ -16,7 +16,7 @@ const STORE_PATH: &str = "adversum.json";
 const SETTINGS_KEY: &str = "settings";
 const MAX_SETTINGS_BYTES: usize = 512 * 1024;
 const CHANGED_EVENT: &str = "adversum://settings-changed";
-const SETTINGS_KEYS: [&str; 14] = [
+const SETTINGS_KEYS: [&str; 16] = [
     "customerIndicator",
     "logoDevToken",
     "shortcutQuickEntry",
@@ -31,6 +31,8 @@ const SETTINGS_KEYS: [&str; 14] = [
     "voiceDebug",
     "multiModel",
     "teamMembers",
+    "brainModel",
+    "brainModelDir",
 ];
 const MAX_TEAM_MEMBERS: usize = 50;
 const MAX_NAME_CHARS: usize = 40;
@@ -89,6 +91,14 @@ fn validate_voice(values: &Map<String, Value>) -> Result<(), String> {
         if model.as_str().and_then(models::spec).is_none() {
             return Err("Unknown speech model".into());
         }
+    }
+    if let Some(model) = values.get(super::brain::MODEL_KEY) {
+        if !model.as_str().is_some_and(super::brain::valid_model) {
+            return Err("Unknown language model".into());
+        }
+    }
+    if let Some(dir) = values.get(super::brain::MODEL_DIR_KEY) {
+        models::validate_dir(dir.as_str().ok_or("Invalid model folder")?)?;
     }
     if let Some(team) = values.get("teamMembers") {
         let valid = team.as_array().is_some_and(|names| {
@@ -295,7 +305,8 @@ mod tests {
         let ok = json!({"voiceEnabled": true, "voiceModel": "base", "voiceModelDir": "",
             "voiceTapMode": false, "shortcutVoice": "Control+Alt+V",
             "voiceInputDevice": "coreaudio:abc", "voiceDebug": true, "multiModel": "device",
-            "teamMembers": ["Patrick", "Ema"]});
+            "teamMembers": ["Patrick", "Ema"], "brainModel": "qwen-1b5",
+            "brainModelDir": ""});
         apply_patch(&mut settings, object(ok)).unwrap();
         assert_eq!(settings["voiceModel"], "base");
         for bad in [
@@ -310,6 +321,9 @@ mod tests {
             json!({"voiceInputDevice": "x".repeat(513)}),
             json!({"multiModel": "cloud"}),
             json!({"multiModel": true}),
+            json!({"brainModel": "small"}),
+            json!({"brainModelDir": "relative"}),
+            json!({"brainModelDir": 7}),
             json!({"teamMembers": "Patrick"}),
             json!({"teamMembers": ["Patrick", 3]}),
             json!({"teamMembers": [" "]}),

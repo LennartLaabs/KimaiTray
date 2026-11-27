@@ -25,7 +25,7 @@ export ADVERSUM_BUILD
 CI=true ./scripts/adversum/env.sh \
   npm run tauri build -- --target universal-apple-darwin --bundles app
 APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/KimaiTray Adversum.app"
-adversum_add_keyhelper "$APP"
+ADVERSUM_LLM_ARCH=universal adversum_add_keyhelper "$APP"
 adversum_check_signature "$APP"
 adversum_hide_build_copies
 

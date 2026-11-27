@@ -874,22 +874,6 @@
       "aliasesFor": "Aliases for {{name}}",
       "noConnection": "Connect to Kimai to manage aliases.",
       "noEntries": "Nothing found.",
-      "multiModel": "Language model for several entries",
-      "multiModelDescription": "When a sentence names several activities, fixed rules take it apart. Only where they are unsure may a language model read out the activities; all arithmetic stays in the app. \"Automatic\" uses Apple Intelligence on this Mac and otherwise Claude Code with your subscription, which sends the sentence to Anthropic. \"Only on this Mac\" sends nothing.",
-      "multiModelMode": {
-        "auto": "Automatic",
-        "device": "Only on this Mac",
-        "off": "Off"
-      },
-      "multiModelApple": {
-        "available": "Apple Intelligence: ready",
-        "missing": "Apple Intelligence: helper missing in this build",
-        "unavailable": "Apple Intelligence: not available ({{reason}})"
-      },
-      "multiModelClaude": {
-        "found": "Claude Code: found",
-        "missing": "Claude Code: not installed"
-      },
       "team": "Team members",
       "teamDescription": "First names of the team, separated by commas. In a sentence they are people one works with: they go into the note (\"Call mit Patrick\") and never decide the customer.",
       "teamPlaceholder": "Patrick, Michi, …"
@@ -1000,8 +984,9 @@
       "title": "Review and enter · {{count}}",
       "offer": "Several entries found ({{count}}) · ↵ review",
       "source": {
-        "apple": "read with Apple Intelligence",
-        "claude": "read with Claude Code"
+        "rules": "by rules",
+        "local": "local model",
+        "claude": "Claude Code"
       },
       "refining": "reading more closely …",
       "loading": "Loading the day's entries …",
@@ -1051,6 +1036,34 @@
       "hintQuestions": "Answer the yellow questions first, or leave them out",
       "submit": "Enter",
       "toastLabel": "{{count}}× ({{duration}})"
+    },
+    "brain": {
+      "title": "AI model for complex sentences",
+      "description": "A language model that runs on this Mac. It only helps with sentences the fixed rules cannot split with confidence, and only reads out what was said; all arithmetic stays in the app. Nothing leaves the Mac, no account needed. It stays in memory for 10 minutes after use.",
+      "noHelper": "This build lacks the helper program for the local model.",
+      "models": {
+        "gemma-3-4b": {
+          "name": "Gemma 3 4B",
+          "note": "Reads the most correctly, about 3 s per sentence on an M1. License: Gemma Terms of Use (commercial use allowed)."
+        },
+        "qwen-1b5": {
+          "name": "Qwen 2.5 1.5B",
+          "note": "Small and fast (about 1 s), but clearly less accurate. License: Apache 2.0."
+        }
+      },
+      "modelVolume": "The AI model is on \"{{volume}}\", which is not connected.",
+      "useInternal": "Use internal storage",
+      "mode": "Who may help",
+      "modeDescription": "\"Local only\" asks the model above and nothing else. \"Local, else Claude\" also asks Claude Code with your subscription when there is no local model or it fails; this sends the sentence to Anthropic.",
+      "modeOption": {
+        "device": "Local only",
+        "auto": "Local, else Claude",
+        "off": "Off"
+      },
+      "claude": {
+        "found": "Claude Code is installed.",
+        "missing": "Claude Code is not installed."
+      }
     }
   }
 }

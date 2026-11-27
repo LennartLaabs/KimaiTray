@@ -1,15 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-const invoke = vi.hoisted(() => vi.fn());
-vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-
-import {
-  EXTRACT_INSTRUCTIONS,
-  EXTRACT_SCHEMA,
-  extractWithModel,
-  getMultiModelStatus,
-  parseModelOutput,
-} from "./extract";
+import { parseModelOutput, saidNumbers } from "./extract";
 
 /** Thursday 26 November 2026, 14:20. */
 const now = new Date(2026, 10, 26, 14, 20);
@@ -28,8 +19,6 @@ const activity = (fields: Record<string, unknown>) => ({
 const answer = (activities: unknown[], window = 0) =>
   JSON.stringify({ window_minutes: window, activities });
 
-beforeEach(() => vi.clearAllMocks());
-
 describe("parseModelOutput", () => {
   it("turns each kind of amount into what the planner reads", () => {
     const output = answer(
@@ -45,7 +34,9 @@ describe("parseModelOutput", () => {
       ],
       180,
     );
-    expect(parseModelOutput(output, "egal", now)).toEqual({
+    const sentence =
+      "Die letzten 3 Stunden eine Stunde DUSW Design, dazwischen 10 Minuten K&K Call, 8 mal kurz Gigi, immer wieder Designs je 7 Minuten, von 9 bis 12 SolarTech, der Rest K&K Landingpage";
+    expect(parseModelOutput(output, sentence, now)).toEqual({
       windowMinutes: 180,
       day: null,
       clauses: [
@@ -129,41 +120,59 @@ describe("parseModelOutput", () => {
   });
 });
 
-describe("the native commands", () => {
-  it("asks for the status", async () => {
-    invoke.mockResolvedValue({ mode: "auto", apple: "missing", claude: true });
-    await expect(getMultiModelStatus()).resolves.toEqual({
-      mode: "auto",
-      apple: "missing",
-      claude: true,
-    });
-    expect(invoke).toHaveBeenCalledWith("adversum_multi_status");
+describe("numbers a model makes up", () => {
+  const read = (sentence: string, activities: unknown[], window = 0) =>
+    parseModelOutput(answer(activities, window), sentence, now)!;
+
+  it("are dropped, so the review asks instead", () => {
+    const made = read(
+      "DUSW Design, K&K Call",
+      [activity({ minutes: 180 }), activity({ task: "K&K Call", minutes: 180 })],
+      180,
+    );
+    expect(made.windowMinutes).toBeNull();
+    expect(made.clauses.map((clause) => clause.amount)).toEqual([
+      { kind: "unknown" },
+      { kind: "unknown" },
+    ]);
+    // "Three calls of ten minutes" is 3 × 10, not the 30 a model adds up to.
+    const added = read("Drei Calls à zehn Minuten mit K&K", [activity({ minutes: 30 })]);
+    expect(added.clauses[0]!.amount).toEqual({ kind: "unknown" });
+    const counted = read("Drei Calls à zehn Minuten mit K&K", [
+      activity({ minutes: 10, count: 3, repeated: true }),
+      activity({ task: "erfunden", minutes: 7, count: 5, repeated: true }),
+    ]);
+    expect(counted.clauses.map((clause) => clause.amount)).toEqual([
+      { kind: "times", count: 3, each: 10 },
+      { kind: "times", count: null, each: null },
+    ]);
+    // A time span needs both of its clock times in the sentence.
+    const span = read("Von neun bis halb elf Meeting mit SolarTech, um 4 noch ein Call", [
+      activity({ from: "09:00", to: "10:30" }),
+      activity({ task: "Call", from: "16:00", to: "17:00" }),
+    ]);
+    expect(span.clauses[0]!.amount).toMatchObject({ kind: "span" });
+    expect(span.clauses[1]!.amount).toEqual({ kind: "unknown" });
   });
 
-  it("hands over the sentence with instructions and schema, and checks the answer", async () => {
-    invoke.mockResolvedValue({ provider: "claude", output: answer([activity({ minutes: 30 })]) });
-    await expect(extractWithModel("30 Minuten DUSW Design", now)).resolves.toEqual({
-      source: "claude",
-      extraction: {
-        windowMinutes: null,
-        day: null,
-        clauses: [
-          { text: "DUSW Design", amount: { kind: "minutes", minutes: 30 }, relation: "none" },
-        ],
-      },
-    });
-    expect(invoke).toHaveBeenCalledWith("adversum_multi_extract", {
-      sentence: "30 Minuten DUSW Design",
-      instructions: EXTRACT_INSTRUCTIONS,
-      schema: JSON.stringify(EXTRACT_SCHEMA),
-    });
-    expect(EXTRACT_INSTRUCTIONS).toContain("Never calculate");
-  });
-
-  it("has nothing when no model answered or the answer is useless", async () => {
-    invoke.mockResolvedValue(null);
-    await expect(extractWithModel("x", now)).resolves.toBeNull();
-    invoke.mockResolvedValue({ provider: "apple", output: "Entschuldigung" });
-    await expect(extractWithModel("x", now)).resolves.toBeNull();
+  it("stand when the sentence says them, in whatever form", () => {
+    const said = (sentence: string) => saidNumbers(sentence);
+    expect(
+      [
+        ...said("anderthalb Stunden, 20 min, 2h30, eine Dreiviertelstunde, 1,5h, zwei Stunden, 90min")
+          .minutes,
+      ].sort((a, b) => a - b),
+    ).toEqual([20, 45, 90, 120, 150]);
+    expect([...said("8 mal, dreimal, 2x, zwei Calls").counts].sort((a, b) => a - b)).toEqual([
+      2, 3, 8,
+    ]);
+    // 9:00 and 21:00, 10:30 and 22:30, 14:15, 16:00 (and 4:00).
+    expect([...said("von 9 bis halb elf, 14:15 Uhr, um 4, 25 Uhr").clocks].sort((a, b) => a - b))
+      .toEqual([240, 540, 630, 855, 960, 1260, 1350]);
+    expect(said("ohne Zahlen").minutes.size).toBe(0);
+    // "kurz" is five minutes by agreement, not by the sentence.
+    expect(
+      read("kurz Mails", [activity({ task: "Mails", vague: true })]).clauses[0]!.amount,
+    ).toEqual({ kind: "minutes", minutes: 5, vague: "kurz" });
   });
 });

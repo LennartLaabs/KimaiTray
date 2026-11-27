@@ -17,12 +17,12 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "de" },
   }),
 }));
-vi.mock("./extract", () => ({ extractWithModel: mocks.extractWithModel }));
+vi.mock("./modelApi", () => ({ extractWithModel: mocks.extractWithModel }));
 vi.mock("./useDayEntries", () => ({ useDayEntries: mocks.useDayEntries }));
 vi.mock("../../utils/logger", () => ({ logger: { warn: mocks.warn } }));
 
 import { readMulti } from "./draft";
-import MultiStage from "./MultiStage";
+import MultiStage, { MODEL_PATIENCE_MS } from "./MultiStage";
 import type { Extraction } from "./types";
 
 const now = new Date(2026, 10, 26, 14, 20);
@@ -59,6 +59,7 @@ function show(sentence: string, useModel: boolean) {
       history={EMPTY_HISTORY}
       client={null}
       useModel={useModel}
+      teamMembers={["Patrick"]}
       onSubmit={onSubmit}
       onClose={onClose}
       onSingle={onSingle}
@@ -106,7 +107,7 @@ describe("the stage for several entries", () => {
     const { container } = show(UNSURE, true);
     expect(screen.getByText(/adversum\.multi\.refining/)).toBeTruthy();
     expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(3);
-    expect(mocks.extractWithModel).toHaveBeenCalledWith(UNSURE, now);
+    expect(mocks.extractWithModel).toHaveBeenCalledWith(UNSURE, now, catalog, ["Patrick"]);
 
     await act(async () => answer({ extraction: better, source: "claude" }));
     expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(2);
@@ -116,7 +117,7 @@ describe("the stage for several entries", () => {
   it("keeps the rules' reading when the model has nothing better", async () => {
     mocks.extractWithModel.mockResolvedValue({
       extraction: { ...better, clauses: [better.clauses[0]!] },
-      source: "apple",
+      source: "local",
     });
     const { container } = show(UNSURE, true);
     await act(async () => undefined);
@@ -141,7 +142,7 @@ describe("the stage for several entries", () => {
     // The model found the two activities.
     cleanup();
     onSingle.mockClear();
-    mocks.extractWithModel.mockResolvedValue({ extraction: better, source: "apple" });
+    mocks.extractWithModel.mockResolvedValue({ extraction: better, source: "local" });
     const found = show(UNKNOWN, true);
     await act(async () => undefined);
     expect(found.container.querySelectorAll("[data-multi-row]")).toHaveLength(2);
@@ -161,12 +162,30 @@ describe("the stage for several entries", () => {
     expect(onSingle).toHaveBeenCalledTimes(1);
   });
 
+  it("does not wait longer than eight seconds for a model when the rules have nothing to show", async () => {
+    mocks.extractWithModel.mockReturnValue(new Promise(() => undefined));
+    show(UNKNOWN, true);
+    act(() => vi.advanceTimersByTime(MODEL_PATIENCE_MS - 1));
+    expect(onSingle).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(onSingle).toHaveBeenCalledTimes(1);
+
+    // With a reading of the rules on screen, a slow model is simply awaited.
+    cleanup();
+    onSingle.mockClear();
+    const { container } = show(UNSURE, true);
+    act(() => vi.advanceTimersByTime(MODEL_PATIENCE_MS * 2));
+    expect(onSingle).not.toHaveBeenCalled();
+    expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(3);
+    expect(screen.getByText(/adversum\.multi\.refining/)).toBeTruthy();
+  });
+
   it("ignores an answer that arrives after it was closed", async () => {
     let answer!: (value: unknown) => void;
     mocks.extractWithModel.mockReturnValue(new Promise((resolve) => (answer = resolve)));
     const { unmount } = show(UNKNOWN, true);
     unmount();
-    await act(async () => answer({ extraction: better, source: "apple" }));
+    await act(async () => answer({ extraction: better, source: "local" }));
     expect(onSingle).not.toHaveBeenCalled();
   });
 });

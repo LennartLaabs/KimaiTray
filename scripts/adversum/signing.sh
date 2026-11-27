@@ -36,13 +36,14 @@ adversum_add_keyhelper() {
   [ "$APPLE_SIGNING_IDENTITY" != "-" ] || return 0
   helper="$(./scripts/adversum/keyhelper/build.sh)"
   cp "$helper" "$1/Contents/MacOS/kimaitray-keyhelper"
-  # The helper for Apple's on-device language model, where it can be built.
-  extract="$(./scripts/adversum/extract/build.sh)"
-  if [ -n "$extract" ]; then
-    cp "$extract" "$1/Contents/MacOS/kimaitray-extract"
+  # The helper for the local language model (llama.cpp). It changes with
+  # its source, so it is signed like the app; it touches no keychain.
+  llm="$(./scripts/adversum/llm/build.sh ${ADVERSUM_LLM_ARCH:-})"
+  if [ -n "$llm" ]; then
+    cp "$llm" "$1/Contents/MacOS/kimaitray-llm"
     codesign --force --options runtime -s "$APPLE_SIGNING_IDENTITY" \
-      "$1/Contents/MacOS/kimaitray-extract"
-    echo "==> On-device language model helper added"
+      "$1/Contents/MacOS/kimaitray-llm"
+    echo "==> Language model helper added"
   fi
   codesign --force --options runtime --entitlements src-tauri/Entitlements.plist \
     -s "$APPLE_SIGNING_IDENTITY" "$1"

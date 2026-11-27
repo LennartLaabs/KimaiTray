@@ -1,3 +1,6 @@
+// SHELVED (2026-11-27): not built, not shipped and never run. The local
+// language model (src-tauri/llm-helper) took its place. Kept for reference.
+//
 // ADVERSUM: reads the activities out of a sentence with Apple's on-device
 // language model (Foundation Models, macOS 26 or later with Apple
 // Intelligence switched on). Nothing leaves the Mac.

@@ -40,10 +40,15 @@ export interface AdversumSettings {
   voiceDebug: boolean;
   /**
    * Which language model may help to read a sentence with several entries:
-   * "auto" (on this Mac, else Claude Code), "device" (only on this Mac) or
-   * "off" (rules only).
+   * "device" (the local model, on this Mac only), "auto" (the local model,
+   * else Claude Code, which sends the sentence to Anthropic) or "off" (rules
+   * only).
    */
   multiModel: MultiModelMode;
+  /** The local language model to ask. */
+  brainModel: BrainModel;
+  /** Folder for the local language model's files; empty means the app data folder. */
+  brainModelDir: string;
   /**
    * First names of colleagues. In a sentence they are people one works with:
    * they go into the note ("Call mit Patrick") and never decide the customer.
@@ -53,6 +58,10 @@ export interface AdversumSettings {
 
 export const MAX_TEAM_MEMBERS = 50;
 const MAX_NAME_LENGTH = 40;
+
+/** The local language models on offer (`src-tauri/src/adversum/brain.rs`). */
+export type BrainModel = "gemma-3-4b" | "qwen-1b5";
+export const BRAIN_MODELS: readonly BrainModel[] = ["gemma-3-4b", "qwen-1b5"];
 
 export type MultiModelMode = "auto" | "device" | "off";
 export const MULTI_MODEL_MODES: readonly MultiModelMode[] = ["auto", "device", "off"];
@@ -72,7 +81,9 @@ export const defaultAdversumSettings: AdversumSettings = {
   shortcutVoice: "Control+Alt+V",
   voiceInputDevice: "",
   voiceDebug: false,
-  multiModel: "auto",
+  multiModel: "device",
+  brainModel: "gemma-3-4b",
+  brainModelDir: "",
   teamMembers: ["Patrick", "Michi", "Ema", "Lennart"],
 };
 
@@ -157,7 +168,9 @@ export function normalizeAdversumSettings(raw: unknown): AdversumSettings {
     shortcutVoice: stringValue(value.shortcutVoice, defaultAdversumSettings.shortcutVoice, 256),
     voiceInputDevice: stringValue(value.voiceInputDevice, "", 512),
     voiceDebug: value.voiceDebug === true,
-    multiModel: MULTI_MODEL_MODES.find((mode) => mode === value.multiModel) ?? "auto",
+    multiModel: MULTI_MODEL_MODES.find((mode) => mode === value.multiModel) ?? "device",
+    brainModel: BRAIN_MODELS.find((model) => model === value.brainModel) ?? "gemma-3-4b",
+    brainModelDir: stringValue(value.brainModelDir, "", 1024),
     teamMembers: Array.isArray(value.teamMembers)
       ? value.teamMembers
           .filter((name): name is string => typeof name === "string")

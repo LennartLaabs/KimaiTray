@@ -13,15 +13,12 @@ import {
   SettingsRow,
   SettingsWarning,
 } from "../../settings/SettingsLayout";
-import { getMultiModelStatus, type MultiModelStatus } from "../multi/extract";
 import { normalizeText } from "../quickEntry/normalize";
 import AcceleratorInput from "./AcceleratorInput";
 import {
   emptyConnectionAliases,
-  MULTI_MODEL_MODES,
   type AdversumSettings,
   type AliasKind,
-  type MultiModelMode,
 } from "./adversumSettings";
 import { useAdversumSettings } from "./useAdversumSettings";
 
@@ -61,20 +58,6 @@ export default function QuickEntrySection() {
   const [rejected, setRejected] = useState<ShortcutKey | null>(null);
   const [kind, setKind] = useState<AliasKind>("customers");
   const [filter, setFilter] = useState("");
-  const [models, setModels] = useState<MultiModelStatus | null>(null);
-
-  // Which language models this Mac has; without the native side, none.
-  useEffect(() => {
-    let current = true;
-    getMultiModelStatus()
-      .then((status) => {
-        if (current) setModels(status);
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, []);
 
   const customersQ = useQuery({
     queryKey: ["customers", scope],
@@ -194,38 +177,6 @@ export default function QuickEntrySection() {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
             className="h-[29px] w-[230px] shrink-0 rounded-lg border border-[var(--s-line)] bg-[var(--s-card)] px-2.5 text-[12.5px] text-[var(--s-fg)] outline-none placeholder:text-[var(--s-fg-subtle)] focus:border-[var(--accent)]"
-          />
-        </SettingsRow>
-        <SettingsRow
-          label={t("adversum.quickSettings.multiModel")}
-          description={
-            <>
-              {t("adversum.quickSettings.multiModelDescription")}
-              {models && (
-                <span data-multi-models className="mt-1 block">
-                  {t(
-                    `adversum.quickSettings.multiModelApple.${
-                      models.apple === "available" || models.apple === "missing"
-                        ? models.apple
-                        : "unavailable"
-                    }`,
-                    { reason: models.apple },
-                  )}
-                  {" · "}
-                  {t(`adversum.quickSettings.multiModelClaude.${models.claude ? "found" : "missing"}`)}
-                </span>
-              )}
-            </>
-          }
-        >
-          <Segmented<MultiModelMode>
-            ariaLabel={t("adversum.quickSettings.multiModel")}
-            value={settings.multiModel}
-            onChange={(mode) => void update("multiModel", mode)}
-            options={MULTI_MODEL_MODES.map((value) => ({
-              value,
-              label: t(`adversum.quickSettings.multiModelMode.${value}`),
-            }))}
           />
         </SettingsRow>
       </SettingsList>

@@ -6,10 +6,14 @@ import type { QuickAction } from "../quickEntry/actions";
 import type { QuickCatalog } from "../quickEntry/catalog";
 import type { QuickHistory } from "../quickEntry/history";
 import { buildDraft, type MultiReading } from "./draft";
-import { extractWithModel } from "./extract";
+import { extractWithModel } from "./modelApi";
 import MultiReview from "./MultiReview";
 import type { MultiDraft } from "./types";
 import { useDayEntries } from "./useDayEntries";
+
+/** How long a sentence the rules could not split waits for a model. */
+export const MODEL_PATIENCE_MS = 8_000;
+const NO_TEAM: readonly string[] = [];
 
 interface MultiStageProps {
   sentence: string;
@@ -20,6 +24,8 @@ interface MultiStageProps {
   client: KimaiClient | null;
   /** A language model may be asked where the rules are unsure. */
   useModel: boolean;
+  /** Colleagues' names, which the local model is told about. */
+  teamMembers?: readonly string[];
   onSubmit: (action: QuickAction) => void;
   onClose: () => void;
   /** The sentence is one entry after all; show the usual card. */
@@ -37,6 +43,7 @@ export default function MultiStage({
   history,
   client,
   useModel,
+  teamMembers = NO_TEAM,
   onSubmit,
   onClose,
   onSingle,
@@ -51,7 +58,7 @@ export default function MultiStage({
     if (!(useModel && unsure)) return;
     let current = true;
     const now = new Date();
-    extractWithModel(sentence, now)
+    extractWithModel(sentence, now, catalog, teamMembers)
       .then((answer) => {
         if (!current || !answer) return;
         const better = buildDraft(answer.extraction, catalog, history, now, answer.source);
@@ -72,6 +79,15 @@ export default function MultiStage({
   useEffect(() => {
     if (!draft && !refining) onSingle();
   }, [draft, refining, onSingle]);
+
+  // Without a reading of the rules to show, nobody waits long for a model:
+  // after a while the sentence goes on as the single entry it may be. (With
+  // one, it is on screen already and a later answer just improves it.)
+  useEffect(() => {
+    if (draft || !refining) return;
+    const timer = setTimeout(() => setRefining(false), MODEL_PATIENCE_MS);
+    return () => clearTimeout(timer);
+  }, [draft, refining]);
 
   if (!draft || !entries.ready) {
     return (

@@ -127,8 +127,10 @@ function rewriteDigits(tokens: SpokenToken[], now: Date): void {
     const third = tokens[index + 2];
 
     // "10 Uhr 30" → "10:30", unless the 30 starts a duration ("30 Minuten").
+    // (The raw word: folded, "1,5" would look like the integer 15.)
+    const whole = INTEGER.test(tokens[index]!.raw);
     if (
-      INTEGER.test(word) &&
+      whole &&
       next?.word === "uhr" &&
       third !== undefined &&
       /^\d{1,2}$/.test(third.word) &&
@@ -140,7 +142,7 @@ function rewriteDigits(tokens: SpokenToken[], now: Date): void {
     }
 
     // "2 Stunden 30 Minuten", "1 Stunde und 15" → "2h30".
-    if (INTEGER.test(word) && next !== undefined && HOUR_UNITS.has(next.word)) {
+    if (whole && next !== undefined && HOUR_UNITS.has(next.word)) {
       const skip = third?.word === "und" ? 1 : 0;
       const minutes = tokens[index + 2 + skip]?.word ?? "";
       if (/^\d{1,2}$/.test(minutes) && Number(minutes) < 60) {

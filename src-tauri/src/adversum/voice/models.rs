@@ -20,7 +20,6 @@ pub(crate) const MODEL_KEY: &str = "voiceModel";
 pub(crate) const MODEL_DIR_KEY: &str = "voiceModelDir";
 pub(crate) const DEFAULT_MODEL: &str = "small";
 const DOWNLOAD_EVENT: &str = "adversum://voice-download";
-const DOWNLOAD_BASE: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 /// No data for this long ends a download.
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
@@ -31,6 +30,8 @@ pub(crate) struct ModelSpec {
     pub(crate) file: &'static str,
     pub(crate) size: u64,
     pub(crate) sha256: &'static str,
+    /// Where the file is downloaded from.
+    pub(crate) url: &'static str,
 }
 
 pub(crate) const MODELS: [ModelSpec; 3] = [
@@ -39,18 +40,21 @@ pub(crate) const MODELS: [ModelSpec; 3] = [
         file: "ggml-base.bin",
         size: 147_951_465,
         sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
     },
     ModelSpec {
         id: "small",
         file: "ggml-small.bin",
         size: 487_601_967,
         sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
     },
     ModelSpec {
         id: "large-v3-turbo",
         file: "ggml-large-v3-turbo.bin",
         size: 1_624_555_275,
         sha256: "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
     },
 ];
 
@@ -157,9 +161,9 @@ pub(crate) fn is_installed(dir: &Path, model: &ModelSpec) -> bool {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ModelStatus {
-    id: &'static str,
-    size_bytes: u64,
-    installed: bool,
+    pub(crate) id: &'static str,
+    pub(crate) size_bytes: u64,
+    pub(crate) installed: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -174,6 +178,7 @@ pub(crate) struct DownloadProgress {
 
 struct ActiveDownload {
     model: &'static str,
+    total: u64,
     received: u64,
     cancel: Arc<AtomicBool>,
 }
@@ -203,7 +208,7 @@ pub(crate) fn active_download() -> Option<DownloadProgress> {
         model: active.model.to_string(),
         state: "progress",
         received: active.received,
-        total: spec(active.model).map_or(0, |model| model.size),
+        total: active.total,
     })
 }
 
@@ -244,7 +249,7 @@ async fn fetch(
         .build()
         .map_err(|_| "Failed to initialize the download".to_string())?;
     let mut response = client
-        .get(format!("{DOWNLOAD_BASE}{}", model.file))
+        .get(model.url)
         .send()
         .await
         .map_err(|error| format!("Download failed: {error}"))?;
@@ -303,6 +308,17 @@ async fn fetch(
 pub(crate) async fn download(app: AppHandle, id: String) -> Result<(), String> {
     let model = spec(&id).ok_or("Unknown speech model")?;
     let dir = configured_dir(&app, &super::super::settings::read(&app))?;
+    download_to(app, model, dir).await
+}
+
+/// Downloads any model file into a folder, with the same progress events,
+/// integrity check and one-at-a-time rule. The local language model
+/// (`adversum/brain.rs`) is downloaded through this as well.
+pub(crate) async fn download_to(
+    app: AppHandle,
+    model: &'static ModelSpec,
+    dir: PathBuf,
+) -> Result<(), String> {
     if is_installed(&dir, model) {
         announce(&app, model, "done", model.size);
         return Ok(());
@@ -315,6 +331,7 @@ pub(crate) async fn download(app: AppHandle, id: String) -> Result<(), String> {
         }
         *slot = Some(ActiveDownload {
             model: model.id,
+            total: model.size,
             received: 0,
             cancel: cancel.clone(),
         });
@@ -328,7 +345,7 @@ pub(crate) async fn download(app: AppHandle, id: String) -> Result<(), String> {
     }
     match outcome {
         Ok(Outcome::Done) => {
-            log::info!("Speech model {} downloaded", model.id);
+            log::info!("Model {} downloaded", model.id);
             announce(&app, model, "done", model.size);
             Ok(())
         }
@@ -337,7 +354,7 @@ pub(crate) async fn download(app: AppHandle, id: String) -> Result<(), String> {
             Ok(())
         }
         Err(error) => {
-            log::warn!("Speech model {} download failed: {error}", model.id);
+            log::warn!("Model {} download failed: {error}", model.id);
             announce(&app, model, "failed", 0);
             Err(error)
         }
@@ -354,7 +371,11 @@ pub(crate) fn cancel_download() {
 pub(crate) fn delete(app: &AppHandle, id: &str) -> Result<(), String> {
     let model = spec(id).ok_or("Unknown speech model")?;
     let dir = configured_dir(app, &super::super::settings::read(app))?;
-    let path = model_path(&dir, model);
+    delete_from(&dir, model)
+}
+
+pub(crate) fn delete_from(dir: &Path, model: &ModelSpec) -> Result<(), String> {
+    let path = model_path(dir, model);
     match std::fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -449,6 +470,7 @@ mod tests {
             file: "ggml-test.bin",
             size: 4,
             sha256: "",
+            url: "",
         };
         assert!(!is_installed(dir.path(), &tiny));
         std::fs::write(model_path(dir.path(), &tiny), b"abc").unwrap();

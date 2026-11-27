@@ -230,6 +230,7 @@ export default function QuickEntryWindow() {
                 history={history}
                 client={client}
                 useModel={settings.multiModel !== "off"}
+                teamMembers={settings.teamMembers}
                 onSubmit={send}
                 onClose={close}
                 onSingle={() => {

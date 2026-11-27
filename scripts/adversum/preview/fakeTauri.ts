@@ -348,10 +348,25 @@ const commands: Record<string, (args: Args) => unknown> = {
   // Several entries from one sentence: no language model in the browser,
   // so the rules alone decide, as on a Mac without Apple Intelligence.
   adversum_multi_status: () => ({
-    mode: readStore().adversum?.multiModel ?? "auto",
-    apple: "missing",
+    mode: readStore().adversum?.multiModel ?? "device",
+    local: false,
     claude: false,
   }),
+  // The local model's files: listed, but nothing can be downloaded here.
+  adversum_brain_status: () => ({
+    helper: false,
+    models: [
+      { id: "gemma-3-4b", sizeBytes: 2_489_758_112, installed: false },
+      { id: "qwen-1b5", sizeBytes: 1_117_320_736, installed: false },
+    ],
+    activeModel: null,
+    modelDir: readStore().adversum?.brainModelDir || "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/models",
+    defaultModelDir: "/Users/preview/Library/Application Support/io.adversum.kimaitray/adversum/models",
+    modelVolume: null,
+    download: null,
+  }),
+  adversum_brain_download: () => null,
+  adversum_brain_delete: () => null,
   adversum_multi_extract: () => null,
   adversum_voice_devices: () => [
     { id: "coreaudio:usb", name: "Trust USB microphone", isDefault: true },
