@@ -986,7 +986,7 @@
       "source": {
         "rules": "by rules",
         "local": "local model",
-        "claude": "read with Claude Code"
+        "claude": "Claude Code"
       },
       "refining": "reading more closely …",
       "loading": "Loading the day's entries …",
@@ -1039,7 +1039,7 @@
     },
     "brain": {
       "title": "AI model for complex sentences",
-      "description": "A language model that runs on this Mac. It only helps with sentences the fixed rules cannot split with confidence, and only reads out what was said; all arithmetic stays in the app. Nothing leaves the Mac, no account needed. It stays in memory for 10 minutes after use.",
+      "description": "Optional. A language model that runs on this Mac and helps with sentences the fixed rules cannot split with confidence. It only reads out what was said; all arithmetic stays in the app, and numbers the sentence does not contain are dropped. In our measurement it rarely read hard sentences correctly, so the default is \"Rules only\". Nothing leaves the Mac, no account needed. It stays in memory for 10 minutes after use.",
       "noHelper": "This build lacks the helper program for the local model.",
       "models": {
         "gemma-3-4b": {
@@ -1054,16 +1054,21 @@
       "modelVolume": "The AI model is on \"{{volume}}\", which is not connected.",
       "useInternal": "Use internal storage",
       "mode": "Who may help",
-      "modeDescription": "\"Local only\" asks the model above and nothing else. \"Local, else Claude\" also asks Claude Code with your subscription when there is no local model or it fails; this sends the sentence to Anthropic.",
+      "modeDescription": "\"Rules only\" asks no model. \"Local only\" asks the model above. \"Local, else Claude\" also asks Claude Code with your subscription when there is no local model or it fails; this sends the sentence to Anthropic, and Claude Code has to be logged in.",
       "modeOption": {
         "device": "Local only",
         "auto": "Local, else Claude",
-        "off": "Off"
+        "off": "Rules only"
       },
       "claude": {
         "found": "Claude Code is installed.",
         "missing": "Claude Code is not installed."
       }
+    },
+    "feedback": {
+      "button": "Misunderstood",
+      "flagged": "Misunderstood ✓",
+      "reviewHint": "Keeps the sentence, what was understood and what you enter instead. Stays on this Mac."
     }
   }
 }

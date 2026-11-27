@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toKimaiLocal } from "../../utils/time";
 import { useAdversumDisplay } from "../display/displayStore";
+import { localMinute } from "../feedback/feedback";
 import CustomerAvatar from "../logos/CustomerAvatar";
 import type { BatchEntry, QuickAction } from "../quickEntry/actions";
 import type { QuickCatalog } from "../quickEntry/catalog";
@@ -37,6 +38,12 @@ interface MultiReviewProps {
   refining?: boolean;
   onSubmit: (action: QuickAction) => void;
   onClose: () => void;
+  /**
+   * Shows "Falsch verstanden". Called when a review that was marked so ends:
+   * with what the review first showed, and with the entries that were
+   * entered instead (`null` when it was discarded).
+   */
+  onMisunderstood?: (recognized: unknown, corrected: BatchEntry[] | null) => void;
 }
 
 interface RowEdit {
@@ -65,6 +72,7 @@ export default function MultiReview({
   refining = false,
   onSubmit,
   onClose,
+  onMisunderstood,
 }: MultiReviewProps) {
   const { t, i18n } = useTranslation();
   const display = useAdversumDisplay();
@@ -78,6 +86,9 @@ export default function MultiReview({
   /** The row whose task is being changed, and what was typed for it. */
   const [picking, setPicking] = useState<{ item: number; text: string } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [flagged, setFlagged] = useState(false);
+  /** What the review showed before anything was changed in it. */
+  const firstShown = useRef<unknown>(null);
 
   useEffect(() => rootRef.current?.focus(), []);
 
@@ -128,6 +139,22 @@ export default function MultiReview({
       on: !edit.off && !item.gap,
     };
   });
+  if (firstShown.current === null) {
+    firstShown.current = {
+      readBy: draft.source,
+      entries: rows.map((row) => ({
+        task: row.item.gap ? "Pause" : taskLabel(taskOf(row.item)) || "?",
+        note: taskOf(row.item)?.note ?? "",
+        begin: row.begin ? localMinute(row.begin) : "",
+        end: row.end ? localMinute(row.end) : "",
+      })),
+      asked: plan.questions.map((question) => ({
+        task: taskLabel(taskOf(itemOf(question.item))) || itemOf(question.item).text,
+        question: question.kind,
+      })),
+      assumed: plan.notes.map((note) => note.code),
+    };
+  }
   const entered = rows.filter((row) => row.on);
   const total = entered.reduce((sum, row) => sum + row.minutes, 0);
   const ready =
@@ -174,6 +201,7 @@ export default function MultiReview({
         end: toKimaiLocal(row.end!),
       };
     });
+    if (flagged) onMisunderstood?.(firstShown.current, entries);
     onSubmit({
       type: "batch",
       entries,
@@ -212,7 +240,10 @@ export default function MultiReview({
         if (event.key === "Escape") {
           event.preventDefault();
           if (picking) pick(undefined);
-          else onClose();
+          else {
+            if (flagged) onMisunderstood?.(firstShown.current, null);
+            onClose();
+          }
         } else if (event.key === "Enter" && !picking) {
           event.preventDefault();
           submit();
@@ -448,6 +479,22 @@ export default function MultiReview({
         <span className="min-w-0 flex-1 truncate text-[10px] text-gray-400 dark:text-gray-500">
           {t(plan.questions.length > 0 ? "adversum.multi.hintQuestions" : "adversum.multi.hint")}
         </span>
+        {onMisunderstood && (
+          <button
+            type="button"
+            data-misunderstood
+            aria-pressed={flagged}
+            title={t("adversum.feedback.reviewHint")}
+            onClick={() => setFlagged(!flagged)}
+            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] ${
+              flagged
+                ? "bg-amber-100 font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-gray-500 underline decoration-dotted hover:text-[var(--accent)] dark:text-gray-400"
+            }`}
+          >
+            {t(flagged ? "adversum.feedback.flagged" : "adversum.feedback.button")}
+          </button>
+        )}
         <button
           type="button"
           disabled={!ready}

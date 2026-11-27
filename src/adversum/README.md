@@ -145,6 +145,14 @@ Windows may only `emitTo` a named window (`core:event:allow-emit-to`); plain `em
 5. **Review** (`MultiReview.tsx` in the quick window; the popup hands its sentence over with `MULTI_REVIEW_EVENT`). One row per block with check mark, task (click to type another), note, begin, end and duration. Assumptions are yellow with their switches, questions sit on top with a field and "leave out". Enter sends one `batch` action to the tray window, Esc discards; clicking elsewhere does not.
 6. **Entering** (`useQuickExecutor.ts`). The running timer the entries describe ends where they begin, or is removed when they cover all of it ("keep" in the review leaves it alone and puts the entries before it). Then the entries are created one by one. If a step fails, everything done is taken back. Undo (toast or ⌘Z, five seconds) deletes all created entries and lets the timer run again.
 
+## Misunderstood sentences
+
+The confirmation card of voice input and the review of several entries have a button "Falsch verstanden" (`feedback/feedback.ts`, native `src-tauri/src/adversum/feedback.rs`). It keeps the sentence, what the app made of it and what the user made of it instead, as one JSON line in a local file, for improving the rules later (routine in the repository's `CLAUDE.md`).
+
+- In the **card**, the button hands the sentence to the bar for correcting by hand, like Tab does. The record is written when the corrected entry is sent (`corrected` is what was sent), or when the bar is closed without one (`corrected: null`).
+- In the **review**, the button is a switch. The record is written when the review ends: with the entries that were entered, or with `null` when it was discarded. `recognized` is what the review showed first, before any change, with who read the sentence (rules, local model, Claude Code), the questions it asked and what it assumed.
+- The file is `/Volumes/AdversumDev/feedback/falsch-verstanden.jsonl` where that development volume is mounted and writable, else `adversum/feedback/falsch-verstanden.jsonl` in the app's data folder. Nothing is sent anywhere.
+
 ## Voice input
 
 Hold the voice key (default ⌃⌥V), say what you are working on, release. Everything runs on this Mac; macOS only for now.

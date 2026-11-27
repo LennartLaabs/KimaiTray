@@ -33,14 +33,14 @@ pub(crate) fn valid_mode(mode: &str) -> bool {
     matches!(mode, "auto" | "device" | "off")
 }
 
-/// "device": the local model only (the default). "auto": the local model,
-/// and Claude Code where there is none or it fails. "off": rules only.
+/// "off": rules only (the default). "device": the local model only. "auto":
+/// the local model, and Claude Code where there is none or it fails.
 fn mode(settings: &Map<String, Value>) -> &str {
     settings
         .get(MODE_KEY)
         .and_then(Value::as_str)
         .filter(|mode| valid_mode(mode))
-        .unwrap_or("device")
+        .unwrap_or("off")
 }
 
 /// Where the Claude Code command line is usually installed. An app started
@@ -247,13 +247,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn the_mode_defaults_to_this_mac_only_and_ignores_nonsense() {
+    fn the_mode_defaults_to_rules_only_and_ignores_nonsense() {
         let settings = |value: Value| value.as_object().cloned().unwrap();
-        assert_eq!(mode(&settings(json!({}))), "device");
+        assert_eq!(mode(&settings(json!({}))), "off");
         assert_eq!(mode(&settings(json!({"multiModel": "auto"}))), "auto");
-        assert_eq!(mode(&settings(json!({"multiModel": "off"}))), "off");
-        assert_eq!(mode(&settings(json!({"multiModel": "cloud"}))), "device");
-        assert_eq!(mode(&settings(json!({"multiModel": 3}))), "device");
+        assert_eq!(mode(&settings(json!({"multiModel": "device"}))), "device");
+        assert_eq!(mode(&settings(json!({"multiModel": "cloud"}))), "off");
+        assert_eq!(mode(&settings(json!({"multiModel": 3}))), "off");
         assert!(valid_mode("auto") && !valid_mode(""));
     }
 

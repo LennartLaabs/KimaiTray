@@ -348,6 +348,34 @@ describe("the confirmation card", () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
+  it("hands a misunderstood sentence over for correcting, with what the card showed", () => {
+    const { container } = result("Heroschmeil Design seit 9 Uhr");
+    fireEvent.click(container.querySelector("[data-misunderstood]")!);
+    expect(onEdit).toHaveBeenCalledWith("Heroschmeil Design seit 9 Uhr", {
+      spoken: "Heroschmeil Design seit 9 Uhr",
+      proposed: expect.objectContaining({ combination: expect.objectContaining({ key: "11-2" }) }),
+      misunderstood: {
+        heard: "Heroschmeil Design seit 9 Uhr",
+        recognized: expect.objectContaining({ task: "DUSW · Retainer · Design", end: "" }),
+      },
+    });
+    // Nothing starts behind the user's back meanwhile.
+    act(() => vi.advanceTimersByTime(AUTO_START_MS * 2));
+    press("Enter");
+    expect(onAction).not.toHaveBeenCalled();
+
+    // A command that was none: the sentence as heard goes to the bar.
+    cleanup();
+    onEdit.mockClear();
+    const command = result("Stopp");
+    fireEvent.click(command.container.querySelector("[data-misunderstood]")!);
+    expect(onEdit).toHaveBeenCalledWith("Stopp", {
+      spoken: "Stopp",
+      proposed: null,
+      misunderstood: { heard: "Stopp", recognized: { kind: "command", command: "stop" } },
+    });
+  });
+
   it("says when the timer that runs now will end", () => {
     // Runs since midnight; the new task began 20 minutes ago.
     const begin = new Date();

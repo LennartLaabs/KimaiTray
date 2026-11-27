@@ -82,7 +82,7 @@ beforeEach(() => {
     return vi.fn();
   });
   mocks.getBrainStatus.mockImplementation(async () => status);
-  mocks.getMultiModelStatus.mockResolvedValue({ mode: "device", local: false, claude: true });
+  mocks.getMultiModelStatus.mockResolvedValue({ mode: "off", local: false, claude: true });
   for (const mock of [mocks.downloadBrainModel, mocks.deleteBrainModel, mocks.cancelVoiceDownload]) {
     mock.mockResolvedValue(undefined);
   }

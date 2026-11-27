@@ -269,6 +269,7 @@ pub fn run() {
             adversum::voice::adversum_voice_cancel,
             adversum::voice::adversum_voice_set_vocabulary,
             adversum::voice::adversum_voice_use_internal,
+            adversum::feedback::adversum_feedback_append,
             adversum::brain::adversum_brain_status,
             adversum::brain::adversum_brain_download,
             adversum::brain::adversum_brain_delete,

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { KimaiClient } from "../../api/kimaiClient";
 import { logger } from "../../utils/logger";
-import type { QuickAction } from "../quickEntry/actions";
+import type { BatchEntry, QuickAction } from "../quickEntry/actions";
 import type { QuickCatalog } from "../quickEntry/catalog";
 import type { QuickHistory } from "../quickEntry/history";
 import { buildDraft, type MultiReading } from "./draft";
@@ -30,6 +30,8 @@ interface MultiStageProps {
   onClose: () => void;
   /** The sentence is one entry after all; show the usual card. */
   onSingle: () => void;
+  /** "Falsch verstanden" was pressed and the review has ended. */
+  onMisunderstood?: (recognized: unknown, corrected: BatchEntry[] | null) => void;
 }
 
 /**
@@ -47,6 +49,7 @@ export default function MultiStage({
   onSubmit,
   onClose,
   onSingle,
+  onMisunderstood,
 }: MultiStageProps) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<MultiDraft | null>(reading.draft);
@@ -108,6 +111,7 @@ export default function MultiStage({
       refining={refining}
       onSubmit={onSubmit}
       onClose={onClose}
+      onMisunderstood={onMisunderstood}
     />
   );
 }

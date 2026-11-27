@@ -32,6 +32,11 @@ const mocks = vi.hoisted(() => ({
   setVoiceVocabulary: vi.fn(),
   invoke: vi.fn(),
   extractWithModel: vi.fn(),
+  saveMisunderstood: vi.fn(),
+}));
+vi.mock("../feedback/feedback", async (original) => ({
+  ...(await original<typeof import("../feedback/feedback")>()),
+  saveMisunderstood: mocks.saveMisunderstood,
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("../multi/modelApi", () => ({ extractWithModel: mocks.extractWithModel }));
@@ -155,6 +160,7 @@ beforeEach(() => {
   for (const mock of [
     mocks.hideQuickWindow, mocks.showQuickToast, mocks.resizeQuickWindow, mocks.emitTo,
     mocks.startVoice, mocks.cancelVoice, mocks.setVoiceVocabulary, mocks.invoke,
+    mocks.saveMisunderstood,
   ]) {
     mock.mockResolvedValue(undefined);
   }
@@ -547,6 +553,10 @@ describe("QuickEntryWindow", () => {
     });
 
     it("asks a model about a spoken sentence the rules cannot split, then shows the usual card", async () => {
+      // Models are off unless switched on.
+      mocks.settings = {
+        settings: { ...(mocks.settings.settings as object), multiModel: "device" },
+      };
       mocks.extractWithModel.mockResolvedValue(null);
       const { container } = await renderWindow();
       await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
@@ -565,10 +575,42 @@ describe("QuickEntryWindow", () => {
       expect(mocks.extractWithModel).toHaveBeenCalledTimes(1);
     });
 
-    it("asks no model when the setting forbids it", async () => {
-      mocks.settings = {
-        settings: { ...(mocks.settings.settings as object), multiModel: "off" },
-      };
+    it("keeps a review that was marked as misunderstood, with what was entered instead", async () => {
+      const { container } = await renderWindow();
+      const input = open();
+      await waitFor(() => {
+        fireEvent.change(input, { target: { value: SEVERAL } });
+        expect(container.querySelector("[data-multi-offer]")).not.toBeNull();
+      });
+      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.click(container.querySelector("[data-misunderstood]")!);
+      fireEvent.keyDown(review(container)!, { key: "Enter" });
+      expect(mocks.saveMisunderstood).toHaveBeenCalledWith({
+        time: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        sentence: SEVERAL,
+        source: "typed",
+        recognized: expect.objectContaining({ readBy: "rules" }),
+        corrected: [
+          expect.objectContaining({ task: "DUSW · Retainer · Projektmanagement" }),
+          expect.objectContaining({ task: "Herosmile · Social · Projektmanagement" }),
+        ],
+      });
+
+      // Marked and then discarded: kept without a correction. A file that
+      // cannot be written is logged, no more.
+      mocks.saveMisunderstood.mockRejectedValue(new Error("disk full"));
+      act(() => windowHandlers[MULTI_REVIEW_EVENT]!({ payload: { sentence: SEVERAL } }));
+      await waitFor(() => expect(container.querySelectorAll("[data-multi-row]")).toHaveLength(2));
+      fireEvent.click(container.querySelector("[data-misunderstood]")!);
+      fireEvent.keyDown(review(container)!, { key: "Escape" });
+      expect(mocks.saveMisunderstood.mock.lastCall![0]).toMatchObject({ corrected: null });
+      await waitFor(() =>
+        expect(mocks.loggerError).toHaveBeenCalledWith(expect.stringContaining("disk full")),
+      );
+    });
+
+    it("asks no model by default", async () => {
+      expect(defaultAdversumSettings.multiModel).toBe("off");
       const { container } = await renderWindow();
       await waitFor(() => expect(mocks.fetchHistory).toHaveBeenCalled());
       act(() =>
@@ -592,6 +634,42 @@ describe("QuickEntryWindow", () => {
       );
       await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
     }
+
+    it("keeps a misunderstood sentence with what was typed instead, or with nothing", async () => {
+      await hear("Heroschmeil pm");
+      fireEvent.click(document.querySelector("[data-misunderstood]")!);
+      const input = screen.getByRole("combobox") as HTMLInputElement;
+      expect(input.value).toBe("Heroschmeil pm");
+      await waitFor(() => {
+        fireEvent.change(input, { target: { value: "herosmile pm" } });
+        expect(screen.getByRole("option", { selected: true }).textContent).toContain("Herosmile");
+      });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(mocks.saveMisunderstood).toHaveBeenCalledTimes(1);
+      expect(mocks.saveMisunderstood).toHaveBeenCalledWith({
+        time: expect.any(String),
+        sentence: "Heroschmeil pm",
+        source: "voice",
+        recognized: expect.objectContaining({ task: "DUSW · Retainer · Projektmanagement" }),
+        corrected: expect.objectContaining({ task: "Herosmile · Social · Projektmanagement" }),
+      });
+
+      // Given up instead of corrected.
+      act(() =>
+        windowHandlers[VOICE_STATE_EVENT]!({
+          payload: { phase: "result", manual: false, text: "Heroschmeil Projektmanagement" },
+        }),
+      );
+      await waitFor(() => expect(document.querySelector("[data-misunderstood]")).not.toBeNull());
+      fireEvent.click(document.querySelector("[data-misunderstood]")!);
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+      expect(mocks.saveMisunderstood).toHaveBeenCalledTimes(2);
+      expect(mocks.saveMisunderstood.mock.lastCall![0]).toMatchObject({
+        sentence: "Heroschmeil Projektmanagement",
+        corrected: null,
+      });
+    });
 
     /** The first row (DUSW, by history) is preselected; Herosmile is the second. */
     function chooseHerosmile() {

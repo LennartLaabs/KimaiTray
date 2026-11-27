@@ -41,6 +41,7 @@ const catalog = buildCatalog(
 
 const onSubmit = vi.fn();
 const onClose = vi.fn();
+const onMisunderstood = vi.fn();
 
 function draftOf(sentence: string): MultiDraft {
   const { draft } = readMulti(sentence, catalog, EMPTY_HISTORY, now);
@@ -50,7 +51,13 @@ function draftOf(sentence: string): MultiDraft {
 
 function show(
   sentence: string,
-  props: { busy?: Interval[]; running?: RunningEntry | null; refining?: boolean; draft?: MultiDraft } = {},
+  props: {
+    busy?: Interval[];
+    running?: RunningEntry | null;
+    refining?: boolean;
+    draft?: MultiDraft;
+    feedback?: boolean;
+  } = {},
 ) {
   return render(
     <MultiReview
@@ -62,6 +69,7 @@ function show(
       refining={props.refining}
       onSubmit={onSubmit}
       onClose={onClose}
+      onMisunderstood={props.feedback ? onMisunderstood : undefined}
     />,
   );
 }
@@ -324,6 +332,62 @@ describe("the review of several entries", () => {
     expect(total(container)).toBe("adversum.multi.total:2 h 5 min");
     fireEvent.keyDown(root(container), { key: "Enter" });
     expect(onSubmit.mock.lastCall![0].entries).toHaveLength(3);
+  });
+
+  it("keeps what it first showed and what was entered instead when marked as misunderstood", () => {
+    const { container } = show(HOUR, { feedback: true });
+    const button = container.querySelector<HTMLButtonElement>("[data-misunderstood]")!;
+    expect(button.textContent).toBe("adversum.feedback.button");
+    // Correct first, mark at any time: what counts is what was shown first.
+    fireEvent.click(screen.getByText("adversum.multi.within.toMerged"));
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(button.textContent).toBe("adversum.feedback.flagged");
+    fireEvent.keyDown(root(container), { key: "Enter" });
+    expect(onMisunderstood).toHaveBeenCalledTimes(1);
+    const [recognized, corrected] = onMisunderstood.mock.lastCall!;
+    expect(recognized).toEqual({
+      readBy: "rules",
+      entries: [
+        { task: "DUSW · Design", note: "", begin: "2026-11-26T13:20", end: "2026-11-26T13:45" },
+        { task: "K&K Global Solutions · Austausch", note: "Call", begin: "2026-11-26T13:45", end: "2026-11-26T13:55" },
+        { task: "DUSW · Design", note: "", begin: "2026-11-26T13:55", end: "2026-11-26T14:20" },
+      ],
+      asked: [],
+      assumed: [],
+    });
+    expect(corrected).toHaveLength(2);
+    expect(corrected[0]).toMatchObject({ begin: "2026-11-26T13:20:00", end: "2026-11-26T14:10:00" });
+
+    // Discarded after marking: kept without a correction. Unmarked: not kept.
+    cleanup();
+    onMisunderstood.mockClear();
+    const discarded = show(
+      "Mehrmals je 10 Minuten DUSW Design, danach 20 Minuten K&K Call, dazwischen 5 Minuten Pause",
+      { feedback: true },
+    );
+    fireEvent.click(discarded.container.querySelector("[data-misunderstood]")!);
+    fireEvent.keyDown(root(discarded.container), { key: "Escape" });
+    expect(onMisunderstood.mock.lastCall![1]).toBeNull();
+    expect(onMisunderstood.mock.lastCall![0]).toMatchObject({
+      asked: [{ task: "DUSW · Design", question: "count" }],
+      entries: [
+        { task: "K&K Global Solutions · Austausch" },
+        { task: "Pause", note: "" },
+        { task: "K&K Global Solutions · Austausch" },
+      ],
+    });
+    cleanup();
+    onMisunderstood.mockClear();
+    const unmarked = show(HOUR, { feedback: true });
+    fireEvent.click(unmarked.container.querySelector("[data-misunderstood]")!);
+    fireEvent.click(unmarked.container.querySelector("[data-misunderstood]")!);
+    fireEvent.keyDown(root(unmarked.container), { key: "Enter" });
+    fireEvent.keyDown(root(unmarked.container), { key: "Escape" });
+    expect(onMisunderstood).not.toHaveBeenCalled();
+    // Without a place to keep it there is no button.
+    cleanup();
+    expect(show(HOUR).container.querySelector("[data-misunderstood]")).toBeNull();
   });
 
   it("names the day, the model that read the sentence and plan-wide notes", () => {

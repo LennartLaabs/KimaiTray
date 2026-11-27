@@ -40,9 +40,10 @@ export interface AdversumSettings {
   voiceDebug: boolean;
   /**
    * Which language model may help to read a sentence with several entries:
-   * "device" (the local model, on this Mac only), "auto" (the local model,
-   * else Claude Code, which sends the sentence to Anthropic) or "off" (rules
-   * only).
+   * "off" (rules only, the default: measured on 2026-11-27, no model small
+   * enough for every Mac read our hard sentences reliably), "device" (the
+   * local model, on this Mac only) or "auto" (the local model, else Claude
+   * Code, which sends the sentence to Anthropic).
    */
   multiModel: MultiModelMode;
   /** The local language model to ask. */
@@ -64,7 +65,7 @@ export type BrainModel = "gemma-3-4b" | "qwen-1b5";
 export const BRAIN_MODELS: readonly BrainModel[] = ["gemma-3-4b", "qwen-1b5"];
 
 export type MultiModelMode = "auto" | "device" | "off";
-export const MULTI_MODEL_MODES: readonly MultiModelMode[] = ["auto", "device", "off"];
+export const MULTI_MODEL_MODES: readonly MultiModelMode[] = ["off", "device", "auto"];
 
 export const ADVERSUM_SETTINGS_EVENT = "adversum://settings-changed";
 
@@ -81,7 +82,7 @@ export const defaultAdversumSettings: AdversumSettings = {
   shortcutVoice: "Control+Alt+V",
   voiceInputDevice: "",
   voiceDebug: false,
-  multiModel: "device",
+  multiModel: "off",
   brainModel: "gemma-3-4b",
   brainModelDir: "",
   teamMembers: ["Patrick", "Michi", "Ema", "Lennart"],
@@ -168,7 +169,7 @@ export function normalizeAdversumSettings(raw: unknown): AdversumSettings {
     shortcutVoice: stringValue(value.shortcutVoice, defaultAdversumSettings.shortcutVoice, 256),
     voiceInputDevice: stringValue(value.voiceInputDevice, "", 512),
     voiceDebug: value.voiceDebug === true,
-    multiModel: MULTI_MODEL_MODES.find((mode) => mode === value.multiModel) ?? "device",
+    multiModel: MULTI_MODEL_MODES.find((mode) => mode === value.multiModel) ?? "off",
     brainModel: BRAIN_MODELS.find((model) => model === value.brainModel) ?? "gemma-3-4b",
     brainModelDir: stringValue(value.brainModelDir, "", 1024),
     teamMembers: Array.isArray(value.teamMembers)

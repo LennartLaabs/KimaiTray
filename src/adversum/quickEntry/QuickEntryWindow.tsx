@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { emitTo } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useKimaiClient } from "../../hooks/useKimaiClient";
+import { describeAction, saveMisunderstood } from "../feedback/feedback";
 import { useLanguageSync } from "../../hooks/useLanguageSync";
 import { currentPlatform } from "../../platform";
 import { logger } from "../../utils/logger";
@@ -149,11 +150,28 @@ export default function QuickEntryWindow() {
     return () => observer.disconnect();
   }, []);
 
+  /** Keeps a sentence that was marked as misunderstood, with its correction. */
+  const keep = useCallback(
+    (sentence: string, source: "voice" | "typed", recognized: unknown, corrected: unknown) => {
+      void saveMisunderstood({
+        time: new Date().toISOString(),
+        sentence,
+        source,
+        recognized,
+        corrected,
+      }).catch(report);
+    },
+    [],
+  );
+
   const close = useCallback(() => {
+    // Marked as misunderstood, then given up: that is worth knowing too.
+    const given = voiceOrigin.current?.misunderstood;
+    if (given) keep(given.heard, "voice", given.recognized, null);
     voiceOrigin.current = null;
     setStage({ name: "idle" });
     void hideQuickWindow().catch(report);
-  }, []);
+  }, [keep]);
 
   const send = (action: QuickAction, learned: readonly LearnedAlias[] = []) => {
     // The window closes right away; the outcome comes back as a toast.
@@ -171,6 +189,12 @@ export default function QuickEntryWindow() {
   /** An action from the bar; after voice input, what the edit corrected is learned. */
   const sendTyped = (action: QuickAction) => {
     const origin = voiceOrigin.current;
+    if (origin?.misunderstood) {
+      const { heard, recognized } = origin.misunderstood;
+      keep(heard, "voice", recognized, describeAction(action, catalog));
+      // Sent with its correction; closing must not report it again.
+      voiceOrigin.current = { spoken: origin.spoken, proposed: origin.proposed };
+    }
     const chosen =
       origin && (action.type === "start" || action.type === "log")
         ? catalog.combinations.find(
@@ -233,6 +257,15 @@ export default function QuickEntryWindow() {
                 teamMembers={settings.teamMembers}
                 onSubmit={send}
                 onClose={close}
+                onMisunderstood={(recognized, corrected) =>
+                  keep(
+                    stage.sentence,
+                    stage.spoken ? "voice" : "typed",
+                    recognized,
+                    corrected &&
+                      describeAction({ type: "batch", entries: corrected, timer: null, label: "" }, catalog),
+                  )
+                }
                 onSingle={() => {
                   // One entry after all: the card for speech, the bar for typing.
                   singleRef.current = stage.sentence;

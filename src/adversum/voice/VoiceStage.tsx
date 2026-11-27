@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { actionForSuggestion, type QuickAction, type QuickStartMode } from "../quickEntry/actions";
 import type { KimaiClient } from "../../api/kimaiClient";
+import { describeReading } from "../feedback/feedback";
 import { useDayEntries } from "../multi/useDayEntries";
 import type { QuickCatalog } from "../quickEntry/catalog";
 import type { QuickHistory } from "../quickEntry/history";
@@ -32,6 +33,11 @@ const NO_SUGGESTIONS: QuickSuggestion[] = [];
 export interface VoiceOrigin {
   spoken: string;
   proposed: QuickSuggestion | null;
+  /**
+   * Set by "Falsch verstanden": the sentence as it was heard and what the
+   * card showed for it. What the user then enters by hand is kept with it.
+   */
+  misunderstood?: { heard: string; recognized: unknown };
 }
 
 interface VoiceStageProps {
@@ -486,8 +492,31 @@ function Confirm({ text, catalog, history, client, onAction, onEdit, onClose }: 
           </p>
         )}
         {rowCount > 0 && (
-          <p className="px-2.5 pb-1 pt-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-            {t(counting ? "adversum.voice.hintAuto" : "adversum.voice.hintConfirm")}
+          <p className="flex items-center gap-2 px-2.5 pb-1 pt-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+            <span className="min-w-0 flex-1 truncate">
+              {t(counting ? "adversum.voice.hintAuto" : "adversum.voice.hintConfirm")}
+            </span>
+            <button
+              type="button"
+              data-misunderstood
+              // The sentence goes to the bar for correcting; what is entered
+              // there is kept next to what was understood here.
+              onClick={() => {
+                done.current = true;
+                onEdit(reading.kind === "entry" ? reading.text : text, {
+                  spoken: reading.kind === "entry" ? reading.text : text,
+                  proposed: suggestions[0] ?? null,
+                  misunderstood: {
+                    heard: text,
+                    recognized:
+                      reading.kind === "entry" ? describeReading(reading.result) : reading,
+                  },
+                });
+              }}
+              className="shrink-0 rounded px-1 py-0.5 text-[10px] text-gray-500 underline decoration-dotted hover:text-[var(--accent)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent)] dark:text-gray-400"
+            >
+              {t("adversum.feedback.button")}
+            </button>
           </p>
         )}
       </div>

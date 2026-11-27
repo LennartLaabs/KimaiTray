@@ -1039,7 +1039,7 @@
     },
     "brain": {
       "title": "KI-Modell für komplexe Sätze",
-      "description": "Ein Sprachmodell, das auf diesem Mac läuft. Es hilft nur bei Sätzen, die die festen Regeln nicht sicher zerlegen können, und liest nur heraus, was gesagt wurde; gerechnet wird immer in der App. Nichts verlässt den Mac, kein Konto nötig. Nach Benutzung bleibt es 10 Minuten im Arbeitsspeicher.",
+      "description": "Optional. Ein Sprachmodell, das auf diesem Mac läuft und bei Sätzen hilft, die die festen Regeln nicht sicher zerlegen können. Es liest nur heraus, was gesagt wurde; gerechnet wird immer in der App, und Zahlen, die im Satz nicht vorkommen, werden verworfen. In unserer Messung hat es schwierige Sätze nur selten richtig gelesen, deshalb ist der Standard „Nur Regeln“. Nichts verlässt den Mac, kein Konto nötig. Nach Benutzung bleibt es 10 Minuten im Arbeitsspeicher.",
       "noHelper": "Diesem Build fehlt das Hilfsprogramm für das lokale Modell.",
       "models": {
         "gemma-3-4b": {
@@ -1054,16 +1054,21 @@
       "modelVolume": "Das KI-Modell liegt auf „{{volume}}“, das nicht angeschlossen ist.",
       "useInternal": "Internen Speicher verwenden",
       "mode": "Wer darf helfen",
-      "modeDescription": "„Nur lokal“ fragt allein das Modell oben. „Lokal, sonst Claude“ fragt zusätzlich Claude Code mit deinem Abo, wenn kein lokales Modell da ist oder es scheitert; dabei geht der Satz an Anthropic.",
+      "modeDescription": "„Nur Regeln“ fragt kein Modell. „Nur lokal“ fragt das Modell oben. „Lokal, sonst Claude“ fragt zusätzlich Claude Code mit deinem Abo, wenn kein lokales Modell da ist oder es scheitert; dabei geht der Satz an Anthropic, und Claude Code muss angemeldet sein.",
       "modeOption": {
         "device": "Nur lokal",
         "auto": "Lokal, sonst Claude",
-        "off": "Aus"
+        "off": "Nur Regeln"
       },
       "claude": {
         "found": "Claude Code ist installiert.",
         "missing": "Claude Code ist nicht installiert."
       }
+    },
+    "feedback": {
+      "button": "Falsch verstanden",
+      "flagged": "Falsch verstanden ✓",
+      "reviewHint": "Merkt sich den Satz, was erkannt wurde und was du stattdessen einträgst. Bleibt auf diesem Mac."
     }
   }
 }
