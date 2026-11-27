@@ -55,21 +55,61 @@ describe("buildCatalog", () => {
     expect(catalog.customers.get(1)).toEqual({
       words: ["dusw", "unternehmensgruppe"],
       aliases: ["gigi"],
+      topics: [],
       acronym: "du",
     });
     expect(catalog.customers.get(2)?.words).toEqual(["mueller", "muller", "soehne", "sohne"]);
     expect(catalog.projects.get(11)).toEqual({
       words: ["marketing", "retainer"],
       aliases: ["retainer", "dusw"],
+      topics: [],
       acronym: "mr",
     });
     expect(catalog.activities.get(2)).toEqual({
       words: ["austausch"],
       aliases: ["call", "telefonat", "meeting"],
+      topics: [],
       acronym: "",
     });
     expect(catalog.activities.has(4)).toBe(false);
     expect(catalog.projects.has(13)).toBe(false);
+  });
+
+  it("reads aliases, contacts and topics from the description in Kimai", () => {
+    const profiled = buildCatalog(
+      [
+        {
+          id: 1,
+          name: "Bäckerei Huber GmbH",
+          comment:
+            "Rechnung per Post.\nAliasse: Huber, BH\nKontakte: Sepp Huber (Seppi), Frau Maier, Patrick\nThemen: Google Ads, Website, PR",
+        },
+        { id: 2, name: "Ohne Steckbrief", comment: null },
+      ],
+      [
+        { id: 11, name: "Retainer", customer: 1, comment: "Aliasse: Dauerauftrag" },
+        { id: 21, name: "Projekt", customer: 2 },
+      ],
+      [{ id: 4, name: "Design", project: null, comment: "Themen: Roll-Ups, Flyer" }],
+      { customers: { "1": ["baecker"] }, projects: {}, activities: {} },
+      ["Patrick"],
+    );
+    expect(profiled.customers.get(1)).toEqual({
+      words: ["baeckerei", "backerei", "huber", "gmbh"],
+      // Own alias, the team's aliases, the contacts and their nicknames;
+      // no titles, and never a colleague.
+      aliases: ["baecker", "huber", "bh", "sepp", "seppi", "maier"],
+      topics: ["google", "ads", "website"],
+      acronym: "bhg",
+    });
+    expect(profiled.projects.get(11)?.aliases).toEqual(["dauerauftrag"]);
+    expect(profiled.activities.get(4)?.topics).toEqual(["roll", "ups", "flyer"]);
+    expect(profiled.profiles.get(1)?.contacts.map((contact) => contact.name)).toEqual([
+      "Sepp Huber",
+      "Frau Maier",
+      "Patrick",
+    ]);
+    expect(profiled.profiles.get(2)).toEqual({ aliases: [], contacts: [], topics: [] });
   });
 
   it("keeps colleagues apart from customers", () => {

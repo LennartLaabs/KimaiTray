@@ -4,6 +4,7 @@ import { parseDate } from "./dateParser";
 import { historyScore, type QuickHistory } from "./history";
 import { isNameLike } from "./nameLike";
 import { editDistance, normalizeText, normalizeWords } from "./normalize";
+import { soundsLike } from "./phonetic";
 import { parseTime, type TimeSpec } from "./timeParser";
 
 export const MAX_SUGGESTIONS = 5;
@@ -41,6 +42,8 @@ const GLUE_WORDS = new Set([
   "und", "mit", "fuer", "bei", "beim", "an", "am", "im", "in", "zu", "zum", "zur",
   "von", "vom", "auf", "aus", "ueber", "the",
 ]);
+/** Said in front of a name: they belong to it and start no note. */
+const TITLES = new Set(["frau", "herr", "dr", "prof"]);
 /** Lead into the topic of a talk; after "mit Patrick:" they say nothing. */
 const TOPIC_LEADS = new Set(["wegen", "bezueglich", "thema"]);
 
@@ -87,8 +90,30 @@ export interface QuickParseResult {
   autoSelect: boolean;
 }
 
+/** A word that only sounds like a name counts this much. */
+const SOUND_SCORE = 0.6;
+/** A note word that is one of the entity's topics counts this much. */
+const TOPIC_SCORE = 0.4;
+
+/**
+ * The name, alias or contact of the entity that `word` sounds like, when it
+ * is not written like any of them: "dschuseppe" → "giuseppe".
+ */
+export function soundMatch(word: string, entity: EntityWords): string | null {
+  return (
+    [...entity.aliases, ...entity.words].find((candidate) => soundsLike(word, candidate)) ?? null
+  );
+}
+
 /** How well one typed word names an entity, from 0 (not at all) to 1 (exactly). */
 export function scoreWord(word: string, entity: EntityWords): number {
+  const spelled = spellingScore(word, entity);
+  if (spelled >= MATCH_THRESHOLD) return spelled;
+  return soundMatch(word, entity) ? SOUND_SCORE : spelled;
+}
+
+/** How well the word is written like the entity's names; sound aside. */
+function spellingScore(word: string, entity: EntityWords): number {
   if (entity.aliases.includes(word) || entity.words.includes(word)) return 1;
   if (word.length >= 2 && word === entity.acronym) return 0.85;
   let best = 0;
@@ -122,6 +147,8 @@ interface NoteItem {
   glue?: boolean;
   /** A colleague's name: "Patrick" in "Call mit Patrick". */
   team?: boolean;
+  /** How the word is really written, when it was only heard alike. */
+  as?: string;
 }
 
 interface Assignment {
@@ -131,6 +158,35 @@ interface Assignment {
   /** The words that belong to the note, in order. */
   note: NoteItem[];
   words: Record<Kind, string[]>;
+  /**
+   * Customer and project are named only by words that sound like them
+   * ("Solartek"), none that is written like them.
+   */
+  bySound: boolean;
+}
+
+/** Keeps track of whether the target was named by spelling or only by sound. */
+class Naming {
+  private spelled = false;
+  private heard = false;
+
+  /**
+   * Records how `word` named the entity of `kind`. Returns the note item
+   * for a word that is more than a name, `null` for a mere name.
+   */
+  take(word: string, index: number, kind: Kind, entity: EntityWords): NoteItem | null {
+    const as = spellingScore(word, entity) >= MATCH_THRESHOLD ? null : soundMatch(word, entity);
+    if (kind !== "activity") {
+      if (as) this.heard = true;
+      else this.spelled = true;
+    }
+    if (isNameLike(as ?? word, entity)) return null;
+    return { index, kept: kind, ...(as ? { as } : {}) };
+  }
+
+  get bySound(): boolean {
+    return this.heard && !this.spelled;
+  }
 }
 
 /** The kind that `word` names best among those still open, with its score. */
@@ -173,6 +229,7 @@ function assign(
   const closed = new Set<Kind>();
   const named: Record<Kind, string[]> = { customer: [], project: [], activity: [] };
   const note: NoteItem[] = [];
+  const naming = new Naming();
   let open: Kind | null = null;
   let textScore = 0;
   let matchedWords = 0;
@@ -187,7 +244,8 @@ function assign(
     textScore += score;
     matchedWords += 1;
     named[kind].push(word);
-    if (!isNameLike(word, entities[kind])) note.push({ index, kept: kind });
+    const kept = naming.take(word, index, kind, entities[kind]);
+    if (kept) note.push(kept);
   }
   for (; index < words.length; index++) {
     note.push({ index, kept: null, ...(team.has(words[index]!) ? { team: true } : {}) });
@@ -198,6 +256,7 @@ function assign(
     namesTarget: named.customer.length + named.project.length > 0,
     note,
     words: named,
+    bySound: naming.bySound,
   };
 }
 
@@ -219,12 +278,18 @@ function assignSpoken(
   let matchedWords = 0;
   // Each run of note words between names, glue words included.
   const runs: NoteItem[][] = [[]];
+  const naming = new Naming();
   let noteStarted = false;
   words.forEach((word, index) => {
     const run = runs[runs.length - 1]!;
     // A colleague's name is part of the note and nothing else.
     if (team.has(word)) {
       run.push({ index, kept: null, team: true });
+      return;
+    }
+    // "Frau Meier": the title goes with the name that follows.
+    if (TITLES.has(word)) {
+      run.push({ index, kept: null, glue: true });
       return;
     }
     // A glue word inside a name ("Haus am See") belongs to that name.
@@ -240,8 +305,9 @@ function assignSpoken(
       matchedWords += 1;
       named[kind].push(word);
       // More than a name ("Giuseppe", "Call"): it stays where it was said.
-      if (isNameLike(word, entities[kind])) runs.push([]);
-      else run.push({ index, kept: kind });
+      const kept = naming.take(word, index, kind, entities[kind]);
+      if (kept) run.push(kept);
+      else runs.push([]);
       return;
     }
     // The name of something already named, said again ("Gigi Call für
@@ -274,6 +340,7 @@ function assignSpoken(
     namesTarget: named.customer.length + named.project.length > 0,
     note,
     words: named,
+    bySound: naming.bySound,
   };
 }
 
@@ -372,7 +439,8 @@ function formatNote(
     const whole = token.members.every((member) => inNote.has(member));
     if (whole && written.has(token)) continue;
     written.add(token);
-    const text = whole ? withoutEdgePunctuation(token.raw) : words[item.index]!;
+    // A name that was only heard alike is written the way it is written.
+    const text = item.as ?? (whole ? withoutEdgePunctuation(token.raw) : words[item.index]!);
     if (text) {
       pieces.push({
         text,
@@ -475,12 +543,21 @@ export function parseQuickEntry(
       : 0;
     const hint =
       assignment.words.activity.length === 0 ? hintScore(entities.activity, hints) : 0;
-    const evidenceScore = assignment.textScore + affinity + hint;
+    // A note word that is one of the entity's topics ("Roll-Ups") speaks
+    // for it, most of all when no customer was said.
+    const free = assignment.note.filter((item) => item.kept === null && !item.team);
+    const topic = KINDS.some((kind) =>
+      free.some((item) => entities[kind].topics?.includes(words[item.index]!)),
+    )
+      ? TOPIC_SCORE
+      : 0;
+    const evidenceScore = assignment.textScore + affinity + hint + topic;
     return {
       combination,
       assignment,
       evidenceScore,
-      evidenceCount: assignment.matchedWords + (affinity > 0 ? 1 : 0) + (hint > 0 ? 1 : 0),
+      evidenceCount:
+        assignment.matchedWords + (affinity > 0 ? 1 : 0) + (hint > 0 ? 1 : 0) + (topic > 0 ? 1 : 0),
       namesTarget: assignment.namesTarget || affinity >= AFFINITY_NAMES_TARGET,
       score:
         TEXT_WEIGHT * evidenceScore +
@@ -528,7 +605,16 @@ export function parseQuickEntry(
     confidence,
     // A spoken sentence starts by itself only when it names the customer or
     // the project. What past notes suggest ranks the list, no more.
+    // A customer that was only heard alike starts by itself when no other
+    // customer comes into question for these words.
     autoSelect:
-      confidence >= AUTO_SELECT_CONFIDENCE && (!spoken || !!first?.assignment.namesTarget),
+      confidence >= AUTO_SELECT_CONFIDENCE &&
+      (!spoken || !!first?.assignment.namesTarget) &&
+      (!first?.assignment.bySound ||
+        !candidates.some(
+          (other) =>
+            other.combination.customerId !== first.combination.customerId &&
+            other.assignment.namesTarget,
+        )),
   };
 }

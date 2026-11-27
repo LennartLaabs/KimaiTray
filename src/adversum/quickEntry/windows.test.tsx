@@ -636,10 +636,10 @@ describe("QuickEntryWindow", () => {
     }
 
     it("keeps a misunderstood sentence with what was typed instead, or with nothing", async () => {
-      await hear("Heroschmeil pm");
+      await hear("Herosteil pm");
       fireEvent.click(document.querySelector("[data-misunderstood]")!);
       const input = screen.getByRole("combobox") as HTMLInputElement;
-      expect(input.value).toBe("Heroschmeil pm");
+      expect(input.value).toBe("Herosteil pm");
       await waitFor(() => {
         fireEvent.change(input, { target: { value: "herosmile pm" } });
         expect(screen.getByRole("option", { selected: true }).textContent).toContain("Herosmile");
@@ -648,7 +648,7 @@ describe("QuickEntryWindow", () => {
       expect(mocks.saveMisunderstood).toHaveBeenCalledTimes(1);
       expect(mocks.saveMisunderstood).toHaveBeenCalledWith({
         time: expect.any(String),
-        sentence: "Heroschmeil pm",
+        sentence: "Herosteil pm",
         source: "voice",
         recognized: expect.objectContaining({ task: "DUSW · Retainer · Projektmanagement" }),
         corrected: expect.objectContaining({ task: "Herosmile · Social · Projektmanagement" }),
@@ -657,7 +657,7 @@ describe("QuickEntryWindow", () => {
       // Given up instead of corrected.
       act(() =>
         windowHandlers[VOICE_STATE_EVENT]!({
-          payload: { phase: "result", manual: false, text: "Heroschmeil Projektmanagement" },
+          payload: { phase: "result", manual: false, text: "Herosteil Projektmanagement" },
         }),
       );
       await waitFor(() => expect(document.querySelector("[data-misunderstood]")).not.toBeNull());
@@ -666,7 +666,7 @@ describe("QuickEntryWindow", () => {
       fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
       expect(mocks.saveMisunderstood).toHaveBeenCalledTimes(2);
       expect(mocks.saveMisunderstood.mock.lastCall![0]).toMatchObject({
-        sentence: "Heroschmeil Projektmanagement",
+        sentence: "Herosteil Projektmanagement",
         corrected: null,
       });
     });
@@ -702,13 +702,13 @@ describe("QuickEntryWindow", () => {
 
     it("runs what was understood and stores what a correction taught", async () => {
       mocks.learnAlias.mockRejectedValueOnce(new Error("store is read-only"));
-      await hear("Heroschmeil pm");
+      await hear("Herosteil pm");
       chooseHerosmile();
       fireEvent.keyDown(window, { key: "Enter" });
-      expect(mocks.learnAlias).toHaveBeenCalledWith("conn", "customers", 2, "heroschmeil");
+      expect(mocks.learnAlias).toHaveBeenCalledWith("conn", "customers", 2, "herosteil");
       expect(mocks.emitTo).toHaveBeenCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
         action: expect.objectContaining({ type: "start", projectId: 21, description: "" }),
-        learned: "„heroschmeil“ = Herosmile",
+        learned: "„herosteil“ = Herosmile",
       });
       expect(mocks.hideQuickWindow).toHaveBeenCalledTimes(1);
       await waitFor(() =>
@@ -719,10 +719,10 @@ describe("QuickEntryWindow", () => {
     });
 
     it("can be finished by typing, and learns from that correction too", async () => {
-      await hear("Heroschmeil pm");
+      await hear("Herosteil pm");
       fireEvent.keyDown(window, { key: "Tab" });
       const input = screen.getByRole("combobox") as HTMLInputElement;
-      expect(input.value).toBe("Heroschmeil pm");
+      expect(input.value).toBe("Herosteil pm");
       expect(document.activeElement).toBe(input);
 
       await waitFor(() => {
@@ -730,10 +730,10 @@ describe("QuickEntryWindow", () => {
         expect(screen.getByRole("option", { selected: true }).textContent).toContain("Herosmile");
       });
       fireEvent.keyDown(input, { key: "Enter" });
-      expect(mocks.learnAlias).toHaveBeenCalledWith("conn", "customers", 2, "heroschmeil");
+      expect(mocks.learnAlias).toHaveBeenCalledWith("conn", "customers", 2, "herosteil");
       expect(mocks.emitTo).toHaveBeenLastCalledWith("tray-popup", QUICK_EXECUTE_EVENT, {
         action: expect.objectContaining({ type: "start", projectId: 21 }),
-        learned: "„heroschmeil“ = Herosmile",
+        learned: "„herosteil“ = Herosmile",
       });
 
       // The next entry is typed from scratch: nothing to learn from.
@@ -751,7 +751,7 @@ describe("QuickEntryWindow", () => {
     });
 
     it("learns nothing when the edit ends in a command", async () => {
-      await hear("Heroschmeil pm");
+      await hear("Herosteil pm");
       fireEvent.keyDown(window, { key: "Tab" });
       const input = screen.getByRole("combobox");
       fireEvent.change(input, { target: { value: "stopp" } });

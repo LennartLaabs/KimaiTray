@@ -906,3 +906,111 @@ describe("work that is still going on, and colleagues", () => {
     });
   });
 });
+
+describe("customers known by their profile, and names that are only heard alike", () => {
+  // What Kimai's description fields hold. Patrick is a colleague.
+  const profiled = buildCatalog(
+    [
+      {
+        id: 1,
+        name: "DUSW",
+        comment: "Kontakte: Giuseppe (Gigi), Christian\nThemen: Roll-Ups, Messestand, Hallenfußball",
+      },
+      { id: 2, name: "SolarTech NRW", comment: "Kontakte: Frau Maier, Patrick\nThemen: Imagefilm, Drohne" },
+      {
+        id: 3,
+        name: "Bäckerei Huber GmbH",
+        comment: "Aliasse: Huber\nKontakte: Sepp Huber (Seppi)\nThemen: Google Ads, Website",
+      },
+      { id: 4, name: "Herosmile" },
+    ],
+    [
+      { id: 11, name: "Retainer", customer: 1 },
+      { id: 21, name: "Imagefilm", customer: 2 },
+      { id: 31, name: "Website", customer: 3 },
+      { id: 41, name: "Onlineshop", customer: 4 },
+    ],
+    [
+      { id: 2, name: "Austausch", project: null, comment: "Aliasse: Call, Telefonat, Meeting" },
+      { id: 4, name: "Design", project: null, comment: "Themen: Flyer, Roll-Ups" },
+      { id: 5, name: "Entwicklung", project: null },
+    ],
+    undefined,
+    ["Patrick"],
+  );
+  const usual = buildHistory(
+    [...past(41, 5, 6), ...past(11, 4, 3), ...past(21, 5, 2), ...past(31, 5, 2)],
+    now,
+  );
+
+  function heard(sentence: string) {
+    const reading = readSpoken(sentence, profiled, usual, now);
+    if (reading.kind !== "entry") throw new Error(`"${sentence}" was read as ${reading.kind}`);
+    const first = reading.result.suggestions[0]!;
+    return {
+      task: `${first.combination.customer} · ${first.combination.activity}`,
+      note: first.note,
+      autoSelect: reading.result.autoSelect,
+    };
+  }
+
+  it.each([
+    // A contact names the customer and stays in the note.
+    ["1", "Call mit Giuseppe wegen der Rechnung", "DUSW · Austausch", "Call mit Giuseppe wegen der Rechnung", true],
+    ["2", "Eine Stunde Meeting mit Christian", "DUSW · Austausch", "Meeting mit Christian", true],
+    ["3", "Telefonat mit Frau Maier, 20 Minuten", "SolarTech NRW · Austausch", "Telefonat mit Frau Maier", true],
+    ["4", "Sepp Huber Design Flyer", "Bäckerei Huber GmbH · Design", "Sepp Flyer", true],
+    // A nickname does the same.
+    ["5", "Gigi Call seit zehn Uhr", "DUSW · Austausch", "Call Gigi", true],
+    ["6", "Mit Seppi telefoniert", "Bäckerei Huber GmbH · Austausch", "Telefonat Seppi", true],
+    // The team's alias from Kimai is a mere name.
+    ["7", "Huber Entwicklung Kontaktformular", "Bäckerei Huber GmbH · Entwicklung", "Kontaktformular", true],
+    // A colleague in a customer's contact line decides nothing.
+    // (DUSW is only first in the usual ranking; SolarTech, whose line names him, is not.)
+    ["8", "Call mit Patrick", "DUSW · Austausch", "Call mit Patrick", false],
+    // Topics lift a customer when none was said, but start nothing.
+    ["9", "Design Roll-Ups für die Messe", "DUSW · Design", "Roll-Ups für die Messe", false],
+    ["10", "Zwei Stunden Messestand geplant", "DUSW · Design", "Messestand", false],
+    ["11", "Google Ads optimiert", "Bäckerei Huber GmbH · Entwicklung", "Google Ads optimiert", false],
+    ["12", "Drohne geflogen für den Film", "SolarTech NRW · Entwicklung", "Drohne geflogen für den Film", false],
+    // A topic of the activity picks the activity.
+    ["13", "Herosmile Flyer", "Herosmile · Design", "Flyer", true],
+    // A said customer outweighs another customer's topic.
+    ["14", "Herosmile Entwicklung Messestand", "Herosmile · Entwicklung", "Messestand", true],
+    // Names as speech recognition writes them.
+    ["15", "Call mit Dschuseppe", "DUSW · Austausch", "Call mit Giuseppe", true],
+    ["16", "Tschigi Call wegen Angebot", "DUSW · Austausch", "Call Gigi wegen Angebot", true],
+    ["17", "Solartek Entwicklung", "SolarTech NRW · Entwicklung", "", true],
+    ["18", "Heroschmeil Design", "Herosmile · Design", "", true],
+    ["19", "Telefonat mit Frau Meier", "SolarTech NRW · Austausch", "Telefonat mit Frau Maier", true],
+    ["20", "Bekerei Hubert Entwicklung", "Bäckerei Huber GmbH · Entwicklung", "", true],
+  ])("%s: %s", (_, sentence, task, note, autoSelect) => {
+    expect(heard(sentence)).toEqual({ task, note, autoSelect });
+  });
+
+  it("does not start by itself when a name that was only heard alike fits two customers", () => {
+    const twins = buildCatalog(
+      [
+        { id: 1, name: "Maier Bau" },
+        { id: 2, name: "Meyer Optik" },
+      ],
+      [
+        { id: 11, name: "Website", customer: 1 },
+        { id: 21, name: "Website", customer: 2 },
+      ],
+      [{ id: 5, name: "Entwicklung", project: null }],
+    );
+    const reading = readSpoken("Meier Entwicklung", twins, EMPTY_HISTORY, now);
+    if (reading.kind !== "entry") throw new Error("no entry");
+    expect(reading.result.suggestions.map((item) => item.combination.customer)).toEqual([
+      "Maier Bau",
+      "Meyer Optik",
+    ]);
+    expect(reading.result.autoSelect).toBe(false);
+    // Written like one of them, it is that one.
+    const exact = readSpoken("Meyer Entwicklung", twins, EMPTY_HISTORY, now);
+    expect(exact.kind === "entry" && exact.result.suggestions[0]!.combination.customer).toBe(
+      "Meyer Optik",
+    );
+  });
+});

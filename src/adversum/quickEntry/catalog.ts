@@ -1,4 +1,5 @@
 import type { ConnectionAliases } from "../settings/adversumSettings";
+import { contactNames, parseProfile, type Profile } from "../profile/profileText";
 import { normalizeWords, wordVariants } from "./normalize";
 
 /** The Kimai entities the quick entry bar needs; a subset of the API types. */
@@ -8,6 +9,8 @@ export interface CatalogCustomer {
   visible?: boolean;
   color?: string | null;
   "color-safe"?: string;
+  /** Kimai's description; may hold the profile (`profile/profileText.ts`). */
+  comment?: string | null;
 }
 export interface CatalogProject {
   id: number;
@@ -15,6 +18,7 @@ export interface CatalogProject {
   customer: number;
   visible?: boolean;
   globalActivities?: boolean;
+  comment?: string | null;
 }
 export interface CatalogActivity {
   id: number;
@@ -23,14 +27,21 @@ export interface CatalogActivity {
   visible?: boolean;
   color?: string | null;
   "color-safe"?: string;
+  comment?: string | null;
 }
 
 /** The words an entity can be addressed by, already normalized. */
 export interface EntityWords {
   /** Words of the name, including short umlaut spellings. */
   words: string[];
-  /** Words of the user's aliases for this entity. */
+  /**
+   * Other words for this entity: the user's own aliases, and from the
+   * profile in Kimai the team's aliases and the customer's contacts with
+   * their nicknames.
+   */
   aliases: string[];
+  /** Words of the profile's topics: they hint at the entity, no more. */
+  topics?: string[];
   /** First letters of the name's words ("mr" for "Marketing Retainer"). */
   acronym: string;
 }
@@ -59,24 +70,38 @@ export interface QuickCatalog {
    * only goes into the note ("Call mit Patrick").
    */
   team: ReadonlySet<string>;
+  /** The profiles of the customers in use, as they stand in Kimai. */
+  profiles: ReadonlyMap<number, Profile>;
 }
 
 export function combinationKey(projectId: number, activityId: number): string {
   return `${projectId}-${activityId}`;
 }
 
+/** Said in front of a name, not part of it. */
+const TITLES = new Set(["frau", "herr", "dr", "prof"]);
+
 function entityWords(
   name: string,
   aliases: readonly string[] | undefined,
   team: ReadonlySet<string>,
+  profile: Profile,
 ): EntityWords {
   const nameWords = normalizeWords(name);
+  const called = [
+    ...(aliases ?? []),
+    ...profile.aliases,
+    ...profile.contacts.flatMap(contactNames),
+  ];
   return {
     words: [...new Set(nameWords.flatMap(wordVariants))],
-    // A colleague's name that was stored as an alias (learned before the
-    // team list existed) does not count.
-    aliases: [...new Set((aliases ?? []).flatMap(normalizeWords))].filter(
-      (alias) => !team.has(alias),
+    // A colleague is never a customer's contact or alias, wherever the word
+    // came from (learned before the team list existed, or typed in Kimai).
+    aliases: [...new Set(called.flatMap(normalizeWords))].filter(
+      (alias) => alias.length > 1 && !team.has(alias) && !TITLES.has(alias),
+    ),
+    topics: [...new Set(profile.topics.flatMap(normalizeWords))].filter(
+      (topic) => topic.length > 2,
     ),
     acronym: nameWords.length > 1 ? nameWords.map((word) => word[0]).join("") : "",
   };
@@ -135,14 +160,19 @@ export function buildCatalog(
     }
   }
 
-  const wordsOf = <T extends { id: number; name: string }>(
+  const wordsOf = <T extends { id: number; name: string; comment?: string | null }>(
     entities: ReadonlyMap<number, T>,
     kind: keyof ConnectionAliases,
   ) =>
     new Map(
       [...entities.values()].map((entity) => [
         entity.id,
-        entityWords(entity.name, aliases?.[kind][String(entity.id)], team),
+        entityWords(
+          entity.name,
+          aliases?.[kind][String(entity.id)],
+          team,
+          parseProfile(entity.comment),
+        ),
       ]),
     );
 
@@ -152,5 +182,8 @@ export function buildCatalog(
     projects: wordsOf(usedProjects, "projects"),
     activities: wordsOf(usedActivities, "activities"),
     team,
+    profiles: new Map(
+      [...usedCustomers.values()].map((customer) => [customer.id, parseProfile(customer.comment)]),
+    ),
   };
 }

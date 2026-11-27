@@ -311,8 +311,8 @@ describe("the confirmation card", () => {
   });
 
   it("learns from a correction with the arrow keys", () => {
-    // "Heroschmeil" names nothing, so the usual task comes first.
-    const { container } = result("Heroschmeil Design");
+    // "Herosteil" names nothing, so the usual task comes first.
+    const { container } = result("Herosteil Design");
     // Not sure enough to start by itself, but the first row is preselected.
     expect(container.querySelector("[data-voice-countdown]")).toBeNull();
     expect(screen.getByText("adversum.voice.hintConfirm")).toBeTruthy();
@@ -329,7 +329,7 @@ describe("the confirmation card", () => {
     press("Enter");
     expect(onAction).toHaveBeenCalledWith(
       expect.objectContaining({ type: "start", projectId: 21, activityId: 2, description: "" }),
-      [{ kind: "customers", entityId: 2, alias: "heroschmeil", name: "Herosmile", nameLike: true }],
+      [{ kind: "customers", entityId: 2, alias: "herosteil", name: "Herosmile", nameLike: true }],
     );
   });
 
@@ -349,13 +349,13 @@ describe("the confirmation card", () => {
   });
 
   it("hands a misunderstood sentence over for correcting, with what the card showed", () => {
-    const { container } = result("Heroschmeil Design seit 9 Uhr");
+    const { container } = result("Herosteil Design seit 9 Uhr");
     fireEvent.click(container.querySelector("[data-misunderstood]")!);
-    expect(onEdit).toHaveBeenCalledWith("Heroschmeil Design seit 9 Uhr", {
-      spoken: "Heroschmeil Design seit 9 Uhr",
+    expect(onEdit).toHaveBeenCalledWith("Herosteil Design seit 9 Uhr", {
+      spoken: "Herosteil Design seit 9 Uhr",
       proposed: expect.objectContaining({ combination: expect.objectContaining({ key: "11-2" }) }),
       misunderstood: {
-        heard: "Heroschmeil Design seit 9 Uhr",
+        heard: "Herosteil Design seit 9 Uhr",
         recognized: expect.objectContaining({ task: "DUSW · Retainer · Design", end: "" }),
       },
     });
@@ -413,10 +413,10 @@ describe("the confirmation card", () => {
   });
 
   it("hands the text over for editing with Tab", () => {
-    result("Heroschmeil Design seit 9 Uhr");
+    result("Herosteil Design seit 9 Uhr");
     press("Tab");
-    expect(onEdit).toHaveBeenCalledWith("Heroschmeil Design seit 9 Uhr", {
-      spoken: "Heroschmeil Design seit 9 Uhr",
+    expect(onEdit).toHaveBeenCalledWith("Herosteil Design seit 9 Uhr", {
+      spoken: "Herosteil Design seit 9 Uhr",
       proposed: expect.objectContaining({ combination: expect.objectContaining({ key: "11-2" }) }),
     });
     expect(onAction).not.toHaveBeenCalled();
